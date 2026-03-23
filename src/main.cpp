@@ -172,16 +172,14 @@ int main() {
     glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
     float yaw   = -45.0f;
     float pitch = -35.0f;
-    float cameraSpeed = 5.0f;
+    float cameraSpeed = 0.5f;
     float lookSpeed = 60.0f;
 
-    // Inner camera state (3D position + 4D W coordinate)
-    glm::vec3 innerCamPos = glm::vec3(0.0f, 0.0f, 0.0f);
-    glm::vec3 innerCameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+    // Inner camera state (single 4D position + orientation angles)
+    glm::vec4 innerCam4D = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
     float innerYawZ = 0.0f;
     float innerYawW = 0.0f;
     float innerPitch = 0.0f;
-    float innerCamW = 0.0f;
 
     // 4D hypercube (tesseract) geometry
     const float HS = 0.3f;         // half-size in each 4D dimension
@@ -293,19 +291,39 @@ int main() {
 
             float speed = cameraSpeed * deltaTime;
 
-            // Horizontal movement (XZ plane) with EAQD, based on innerYawZ rotation
-            float yawRad = glm::radians(innerYawZ);
-            glm::vec3 flatFront = glm::vec3(cos(yawRad), 0.0f, sin(yawRad));
-            glm::vec3 flatRight = glm::normalize(glm::cross(flatFront, innerCameraUp));
+            // Compute 4D camera basis vectors in world space (inverse of XW→ZW→YW rotation)
+            float cxwRad = glm::radians(innerYawW);
+            float czwRad = glm::radians(innerYawZ);
+            float cywRad = glm::radians(innerPitch);
+            float cxw = cos(cxwRad), sxw = sin(cxwRad);
+            float czw = cos(czwRad), szw = sin(czwRad);
+            float cyw = cos(cywRad), syw = sin(cywRad);
 
-            if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) innerCamPos += speed * flatFront;
-            if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) innerCamPos -= speed * flatFront;
-            if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) innerCamPos -= speed * flatRight;
-            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) innerCamPos += speed * flatRight;
+            // Camera-relative world directions (inverse of XW→ZW→YW rotation applied to basis vectors)
+            // Camera X-axis → world: only XW rotation affects X
+            float fwdX = cxw,       fwdW =  sxw;                           // camera X (forward)
+            // Camera Z-axis → world: XW and ZW rotations affect Z
+            float rgtX = -sxw*szw,  rgtZ = czw,  rgtW = cxw*szw;          // camera Z (strafe)
+            // Camera W-axis → world: all three rotations affect W
+            float advX = -sxw*czw*cyw, advY = -syw, advZ = -szw*cyw, advW = cxw*czw*cyw; // camera W (advance)
 
-            // 4th dimension movement with W (kata/W-) and S (ana/W+)
-            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) innerCamW += speed;
-            if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) innerCamW -= speed;
+            // E/A: forward/back (camera X direction)
+            if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+                { innerCam4D.x += speed*fwdX; innerCam4D.w += speed*fwdW; }
+            if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+                { innerCam4D.x -= speed*fwdX; innerCam4D.w -= speed*fwdW; }
+
+            // Q/D: strafe left/right (camera Z direction)
+            if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+                { innerCam4D.x -= speed*rgtX; innerCam4D.z -= speed*rgtZ; innerCam4D.w -= speed*rgtW; }
+            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+                { innerCam4D.x += speed*rgtX; innerCam4D.z += speed*rgtZ; innerCam4D.w += speed*rgtW; }
+
+            // W/S: advance/retreat (camera W direction — into 4th dimension)
+            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+                { innerCam4D.x += speed*advX; innerCam4D.y += speed*advY; innerCam4D.z += speed*advZ; innerCam4D.w += speed*advW; }
+            if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+                { innerCam4D.x -= speed*advX; innerCam4D.y -= speed*advY; innerCam4D.z -= speed*advZ; innerCam4D.w -= speed*advW; }
         }
 
         // Render
@@ -325,15 +343,9 @@ int main() {
         glm::mat4 outerView = glm::lookAt(cameraPos, cameraPos + outerCameraFront, cameraUp);
         glm::mat4 outerMVP = projection * outerView * outerModel;
 
-        // Pass 1: Inner scene with clip planes
-        // Use a fixed forward direction since all 4D rotations are applied to vertices
-        glm::vec3 innerCameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
-
-        // Inner view matrix maps inner-world coords to cube-local coords (translation only)
-        glm::mat4 innerLocalView = glm::lookAt(innerCamPos, innerCamPos + innerCameraFront, innerCameraUp);
-
-        // Inner scene: inner view places objects in cube space, outer view/proj renders them
-        glm::mat4 innerMVP = projection * outerView * innerLocalView;
+        // The 4D projection produces positions in a fixed camera-retinal 3D frame.
+        // No additional 3D translation is needed — the projection is already relative to the camera.
+        glm::mat4 innerMVP = projection * outerView;
 
         // Project 4D hypercube vertices to 3D (perspective along W axis)
         // Apply all three 4D camera rotations (XW, ZW, YW planes) to vertices before projection
@@ -347,10 +359,10 @@ int main() {
 
         for (int i = 0; i < 16; i++) {
             // Translate to camera space (camera-relative coordinates)
-            float vx = hcVerts4D[i].x - innerCamPos.x;
-            float vy = hcVerts4D[i].y - innerCamPos.y;
-            float vz = hcVerts4D[i].z - innerCamPos.z;
-            float vw = hcVerts4D[i].w - innerCamW;
+            float vx = hcVerts4D[i].x - innerCam4D.x;
+            float vy = hcVerts4D[i].y - innerCam4D.y;
+            float vz = hcVerts4D[i].z - innerCam4D.z;
+            float vw = hcVerts4D[i].w - innerCam4D.w;
 
             // 1. XW rotation (yaw-W: J/O keys)
             float nx = cxw*vx + sxw*vw;
@@ -367,10 +379,10 @@ int main() {
             nw = -syw*vy + cyw*vw;
             vy = ny; vw = nw;
 
-            // W-perspective projection
-            float denom = viewDist4D - vw;
-            if (std::abs(denom) < 1e-4f) denom = 1e-4f;
-            float f = viewDist4D / denom;
+            // W-perspective projection (camera looks along -W, like 3D looks along -Z)
+            float negVw = -vw;
+            if (negVw < 1e-4f) negVw = 1e-4f;  // clamp vertices at/behind camera
+            float f = viewDist4D / negVw;
             hcVerts3D[i] = glm::vec3(f * vx, f * vy, f * vz);
         }
 
@@ -411,7 +423,7 @@ int main() {
         innerShader.use();
         innerShader.setFloat("uAlpha", 0.2f);
         innerShader.setMat4("MVP", innerMVP);
-        innerShader.setMat4("innerView", innerLocalView);
+        innerShader.setMat4("innerView", glm::mat4(1.0f));
         glBindVertexArray(faceVAO);
         glDrawElements(GL_TRIANGLES, (GLsizei)hcFaceIndices.size(), GL_UNSIGNED_INT, 0);
 
@@ -420,7 +432,7 @@ int main() {
         // Then draw edges (opaque lines) on top
         innerShader.setFloat("uAlpha", 1.0f);
         innerShader.setMat4("MVP", innerMVP);
-        innerShader.setMat4("innerView", innerLocalView);
+        innerShader.setMat4("innerView", glm::mat4(1.0f));
         glBindVertexArray(hcVAO);
         glDrawArrays(GL_LINES, 0, (GLsizei)(hcEdges.size() * 2));
 
