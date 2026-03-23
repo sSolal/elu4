@@ -172,11 +172,11 @@ int main() {
     glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
     float yaw   = -45.0f;
     float pitch = -35.0f;
-    float cameraSpeed = 0.5f;
+    float cameraSpeed = 1.5f;
     float lookSpeed = 60.0f;
 
     // Inner camera state (single 4D position + orientation angles)
-    glm::vec4 innerCam4D = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    glm::vec4 innerCam4D = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
     float innerYawZ = 0.0f;
     float innerYawW = 0.0f;
     float innerPitch = 0.0f;
@@ -224,6 +224,92 @@ int main() {
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, hcFaceIndices.size()*sizeof(unsigned int),
                  hcFaceIndices.data(), GL_STATIC_DRAW);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+    // Wireframe cube (edges only, not triangles)
+    float wireVertices[] = {
+        // 8 vertices of cube at (±0.5, ±0.5, ±0.5)
+        -0.5f, -0.5f, -0.5f,
+         0.5f, -0.5f, -0.5f,
+         0.5f,  0.5f, -0.5f,
+        -0.5f,  0.5f, -0.5f,
+        -0.5f, -0.5f,  0.5f,
+         0.5f, -0.5f,  0.5f,
+         0.5f,  0.5f,  0.5f,
+        -0.5f,  0.5f,  0.5f
+    };
+    unsigned int wireIndices[] = {
+        // 12 edges: 4 bottom, 4 top, 4 vertical
+        0, 1,  1, 2,  2, 3,  3, 0,  // bottom face
+        4, 5,  5, 6,  6, 7,  7, 4,  // top face
+        0, 4,  1, 5,  2, 6,  3, 7   // vertical edges
+    };
+
+    unsigned int wireEdgeVAO, wireEdgeVBO, wireEdgeEBO;
+    glGenVertexArrays(1, &wireEdgeVAO);
+    glGenBuffers(1, &wireEdgeVBO);
+    glGenBuffers(1, &wireEdgeEBO);
+
+    glBindVertexArray(wireEdgeVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, wireEdgeVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(wireVertices), wireVertices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, wireEdgeEBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(wireIndices), wireIndices, GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+
+
+    // Instances: hypercubes on ground
+    struct Instance4D {
+        glm::vec4 pos;
+        float rotXZ, rotXW, rotZW;
+        glm::vec3 colorA, colorB;
+        const std::array<glm::vec4, 16>* verts;
+        int vertCount;
+        std::vector<std::pair<int,int>>* edges;
+        std::vector<unsigned int>* faceIndices;
+    };
+
+    std::vector<Instance4D> instances;
+
+    // Ground grid: hypercubes at y = -HS (below ground level)
+    std::vector<glm::vec3> groundColors = {
+        glm::vec3(0.6f, 0.3f, 0.3f), glm::vec3(0.8f, 0.5f, 0.3f),
+        glm::vec3(0.3f, 0.6f, 0.3f), glm::vec3(0.3f, 0.6f, 0.6f),
+        glm::vec3(0.5f, 0.3f, 0.6f)
+    };
+    int groundColorIdx = 0;
+    for (float x = -1.8f; x <= 1.8f; x += 0.6f) {
+        for (float z = -1.8f; z <= 1.8f; z += 0.6f) {
+            glm::vec3 colA = groundColors[groundColorIdx % groundColors.size()];
+            glm::vec3 colB = groundColors[(groundColorIdx + 1) % groundColors.size()];
+            instances.push_back({{x, -HS, z, 0.0f}, 0.0f, 0.0f, 0.0f,
+                                 colA, colB,
+                                 &hcVerts4D, 16, &hcEdges, &hcFaceIndices});
+            groundColorIdx++;
+        }
+    }
+
+    // Hypercubes floating above ground, spread out with different colors
+    instances.push_back({{0.0f, HS, 0.0f, 0.0f}, 0.0f, 0.0f, 0.0f,
+                         glm::vec3(0.2f, 0.4f, 1.0f), glm::vec3(1.0f, 0.8f, 0.2f),
+                         &hcVerts4D, 16, &hcEdges, &hcFaceIndices});
+    instances.push_back({{1.8f, HS, 1.2f, 0.8f}, 0.52f, 0.0f, 0.31f,
+                         glm::vec3(1.0f, 0.2f, 0.2f), glm::vec3(1.0f, 1.0f, 0.2f),
+                         &hcVerts4D, 16, &hcEdges, &hcFaceIndices});
+    instances.push_back({{-1.8f, HS, 1.5f, -1.0f}, 1.1f, 0.0f, 0.0f,
+                         glm::vec3(0.2f, 1.0f, 0.2f), glm::vec3(0.8f, 0.2f, 1.0f),
+                         &hcVerts4D, 16, &hcEdges, &hcFaceIndices});
+    instances.push_back({{1.5f, HS, -1.8f, 1.2f}, 0.0f, 0.78f, 0.0f,
+                         glm::vec3(1.0f, 0.5f, 0.2f), glm::vec3(0.2f, 1.0f, 1.0f),
+                         &hcVerts4D, 16, &hcEdges, &hcFaceIndices});
+    instances.push_back({{-1.5f, HS, -1.2f, 0.9f}, 0.31f, 0.52f, 0.0f,
+                         glm::vec3(0.8f, 0.2f, 0.8f), glm::vec3(0.2f, 1.0f, 0.5f),
+                         &hcVerts4D, 16, &hcEdges, &hcFaceIndices});
 
     // Mode toggle
     bool insideMode = false;
@@ -403,48 +489,59 @@ int main() {
         glBufferSubData(GL_ARRAY_BUFFER, 0, (GLsizeiptr)(faceVertData.size()*sizeof(float)), faceVertData.data());
         glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-        // Build interleaved line buffer (color: blue=W-, yellow=W+)
-        std::vector<float> lineData;
-        lineData.reserve(hcEdges.size() * 2 * 6);
-        for (auto& [a, b] : hcEdges) {
-            glm::vec3 pa = hcVerts3D[a], ca = wColor(a);
-            glm::vec3 pb = hcVerts3D[b], cb = wColor(b);
-            lineData.insert(lineData.end(), {pa.x, pa.y, pa.z, ca.r, ca.g, ca.b});
-            lineData.insert(lineData.end(), {pb.x, pb.y, pb.z, cb.r, cb.g, cb.b});
-        }
-        glBindBuffer(GL_ARRAY_BUFFER, hcVBO);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, (GLsizeiptr)(lineData.size() * sizeof(float)), lineData.data());
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-        // Render transparent faces first
+        // Render inner scene: translucent shapes only (no edges)
         glDisable(GL_CULL_FACE);  // show both sides of faces
         glDepthMask(GL_FALSE);    // don't write to depth buffer
 
         innerShader.use();
-        innerShader.setFloat("uAlpha", 0.2f);
+        innerShader.setFloat("uAlpha", 0.35f);
         innerShader.setMat4("MVP", innerMVP);
         innerShader.setMat4("innerView", glm::mat4(1.0f));
-        glBindVertexArray(faceVAO);
-        glDrawElements(GL_TRIANGLES, (GLsizei)hcFaceIndices.size(), GL_UNSIGNED_INT, 0);
+
+        // Draw all instance faces (translucent, no edges)
+        for (auto& inst : instances) {
+            std::vector<float> instVertData;
+            for (int i = 0; i < inst.vertCount; i++) {
+                glm::vec4 localV = (*inst.verts)[i];
+                float vx=localV.x, vy=localV.y, vz=localV.z, vw=localV.w;
+                // Local rotations (XZ, XW, ZW)
+                { float c=cos(inst.rotXZ), s=sin(inst.rotXZ);
+                  float nx=c*vx-s*vz, nz=s*vx+c*vz; vx=nx; vz=nz; }
+                { float c=cos(inst.rotXW), s=sin(inst.rotXW);
+                  float nx=c*vx-s*vw, nw=s*vx+c*vw; vx=nx; vw=nw; }
+                { float c=cos(inst.rotZW), s=sin(inst.rotZW);
+                  float nz=c*vz-s*vw, nw=s*vz+c*vw; vz=nz; vw=nw; }
+                // Translate + camera space
+                vx += inst.pos.x - innerCam4D.x;
+                vy += inst.pos.y - innerCam4D.y;
+                vz += inst.pos.z - innerCam4D.z;
+                vw += inst.pos.w - innerCam4D.w;
+                // Camera rotations
+                { float nx=cxw*vx+sxw*vw; float nw=-sxw*vx+cxw*vw; vx=nx; vw=nw; }
+                { float nz=czw*vz+szw*vw; float nw=-szw*vz+czw*vw; vz=nz; vw=nw; }
+                { float ny=cyw*vy+syw*vw; float nw=-syw*vy+cyw*vw; vy=ny; vw=nw; }
+                float negVw=-vw; if(negVw<1e-4f) negVw=1e-4f;
+                float f=viewDist4D/negVw;
+                glm::vec3 p(f*vx, f*vy, f*vz);
+                float t = (localV.w + HS) / (2.0f * HS);
+                if(t < 0.0f) t = 0.0f; if(t > 1.0f) t = 1.0f;
+                glm::vec3 c = glm::mix(inst.colorA, inst.colorB, t);
+                instVertData.insert(instVertData.end(), {p.x, p.y, p.z, c.r, c.g, c.b});
+            }
+            glBindBuffer(GL_ARRAY_BUFFER, faceVBO);
+            glBufferSubData(GL_ARRAY_BUFFER, 0, (GLsizeiptr)(instVertData.size()*sizeof(float)), instVertData.data());
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+            glBindVertexArray(faceVAO);
+            glDrawElements(GL_TRIANGLES, (GLsizei)inst.faceIndices->size(), GL_UNSIGNED_INT, 0);
+        }
 
         glDepthMask(GL_TRUE);
 
-        // Then draw edges (opaque lines) on top
-        innerShader.setFloat("uAlpha", 1.0f);
-        innerShader.setMat4("MVP", innerMVP);
-        innerShader.setMat4("innerView", glm::mat4(1.0f));
-        glBindVertexArray(hcVAO);
-        glDrawArrays(GL_LINES, 0, (GLsizei)(hcEdges.size() * 2));
-
-        // Pass 2: Wireframe outer cube
-        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-
+        // Wireframe outer cube (edges only)
         wireShader.use();
         wireShader.setMat4("MVP", outerMVP);
-        glBindVertexArray(VAO);
-        glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
-
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        glBindVertexArray(wireEdgeVAO);
+        glDrawElements(GL_LINES, 24, GL_UNSIGNED_INT, 0);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -459,6 +556,9 @@ int main() {
     glDeleteVertexArrays(1, &faceVAO);
     glDeleteBuffers(1, &faceVBO);
     glDeleteBuffers(1, &faceEBO);
+    glDeleteVertexArrays(1, &wireEdgeVAO);
+    glDeleteBuffers(1, &wireEdgeVBO);
+    glDeleteBuffers(1, &wireEdgeEBO);
     glfwTerminate();
 
     return 0;
