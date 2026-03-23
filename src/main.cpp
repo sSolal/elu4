@@ -178,7 +178,8 @@ int main() {
     // Inner camera state (3D position + 4D W coordinate)
     glm::vec3 innerCamPos = glm::vec3(0.0f, 0.0f, 0.0f);
     glm::vec3 innerCameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
-    float innerYaw = 0.0f;
+    float innerYawZ = 0.0f;
+    float innerYawW = 0.0f;
     float innerPitch = 0.0f;
     float innerCamW = 0.0f;
 
@@ -252,11 +253,11 @@ int main() {
         tabWasPressed = tabNow;
 
         if (!insideMode) {
-            // Outside mode: control outer camera with arrows and WASD
-            if (glfwGetKey(window, GLFW_KEY_LEFT)  == GLFW_PRESS) yaw   -= lookSpeed * deltaTime;
-            if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) yaw   += lookSpeed * deltaTime;
-            if (glfwGetKey(window, GLFW_KEY_UP)    == GLFW_PRESS) pitch += lookSpeed * deltaTime;
-            if (glfwGetKey(window, GLFW_KEY_DOWN)  == GLFW_PRESS) pitch -= lookSpeed * deltaTime;
+            // Outside mode: control outer camera with IJKL (rotation) and WASD/EC (movement)
+            if (glfwGetKey(window, GLFW_KEY_J)  == GLFW_PRESS) yaw   -= lookSpeed * deltaTime;
+            if (glfwGetKey(window, GLFW_KEY_L)  == GLFW_PRESS) yaw   += lookSpeed * deltaTime;
+            if (glfwGetKey(window, GLFW_KEY_I)  == GLFW_PRESS) pitch += lookSpeed * deltaTime;
+            if (glfwGetKey(window, GLFW_KEY_K)  == GLFW_PRESS) pitch -= lookSpeed * deltaTime;
             pitch = glm::clamp(pitch, -89.0f, 89.0f);
 
             glm::vec3 front;
@@ -276,40 +277,42 @@ int main() {
                 cameraPos -= speed * right;
             if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
                 cameraPos += speed * right;
-            if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+            if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
                 cameraPos += speed * cameraUp;
-            if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
+            if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS)
                 cameraPos -= speed * cameraUp;
         } else {
             // Inside mode: control inner camera, outer camera frozen
-            if (glfwGetKey(window, GLFW_KEY_LEFT)  == GLFW_PRESS) innerYaw   -= lookSpeed * deltaTime;
-            if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) innerYaw   += lookSpeed * deltaTime;
-            if (glfwGetKey(window, GLFW_KEY_UP)    == GLFW_PRESS) innerPitch += lookSpeed * deltaTime;
-            if (glfwGetKey(window, GLFW_KEY_DOWN)  == GLFW_PRESS) innerPitch -= lookSpeed * deltaTime;
+            if (glfwGetKey(window, GLFW_KEY_U)  == GLFW_PRESS) innerYawZ  -= lookSpeed * deltaTime;
+            if (glfwGetKey(window, GLFW_KEY_L)  == GLFW_PRESS) innerYawZ  += lookSpeed * deltaTime;
+            if (glfwGetKey(window, GLFW_KEY_J)  == GLFW_PRESS) innerYawW  -= lookSpeed * deltaTime;
+            if (glfwGetKey(window, GLFW_KEY_O)  == GLFW_PRESS) innerYawW  += lookSpeed * deltaTime;
+            if (glfwGetKey(window, GLFW_KEY_I)  == GLFW_PRESS) innerPitch += lookSpeed * deltaTime;
+            if (glfwGetKey(window, GLFW_KEY_K)  == GLFW_PRESS) innerPitch -= lookSpeed * deltaTime;
             innerPitch = glm::clamp(innerPitch, -89.0f, 89.0f);
 
             glm::vec3 innerFront;
-            innerFront.x = cos(glm::radians(innerYaw)) * cos(glm::radians(innerPitch));
+            innerFront.x = cos(glm::radians(innerYawZ)) * cos(glm::radians(innerPitch));
             innerFront.y = sin(glm::radians(innerPitch));
-            innerFront.z = sin(glm::radians(innerYaw)) * cos(glm::radians(innerPitch));
+            innerFront.z = sin(glm::radians(innerYawZ)) * cos(glm::radians(innerPitch));
             glm::vec3 innerCameraFront = glm::normalize(innerFront);
 
             glm::vec3 innerRight = glm::normalize(glm::cross(innerCameraFront, innerCameraUp));
 
             float speed = cameraSpeed * deltaTime;
 
-            // Horizontal movement (XZ plane) with QSDF
+            // Horizontal movement (XZ plane) with EAQD
             glm::vec3 flatFront = glm::normalize(glm::vec3(innerCameraFront.x, 0.0f, innerCameraFront.z));
             glm::vec3 flatRight = glm::normalize(glm::cross(flatFront, innerCameraUp));
 
-            if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS) innerCamPos += speed * flatFront;
-            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) innerCamPos -= speed * flatFront;
+            if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) innerCamPos += speed * flatFront;
+            if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) innerCamPos -= speed * flatFront;
             if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) innerCamPos -= speed * flatRight;
             if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) innerCamPos += speed * flatRight;
 
-            // 4th dimension movement with E/R
-            if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) innerCamW += speed;
-            if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) innerCamW -= speed;
+            // 4th dimension movement with W (kata/W-) and S (ana/W+)
+            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) innerCamW += speed;
+            if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) innerCamW -= speed;
         }
 
         // Render
@@ -331,9 +334,9 @@ int main() {
 
         // Pass 1: Inner scene with clip planes
         glm::vec3 innerFront;
-        innerFront.x = cos(glm::radians(innerYaw)) * cos(glm::radians(innerPitch));
+        innerFront.x = cos(glm::radians(innerYawZ)) * cos(glm::radians(innerPitch));
         innerFront.y = sin(glm::radians(innerPitch));
-        innerFront.z = sin(glm::radians(innerYaw)) * cos(glm::radians(innerPitch));
+        innerFront.z = sin(glm::radians(innerYawZ)) * cos(glm::radians(innerPitch));
         glm::vec3 innerCameraFront = glm::normalize(innerFront);
 
         // Inner view matrix maps inner-world coords to cube-local coords
@@ -343,13 +346,23 @@ int main() {
         glm::mat4 innerMVP = projection * outerView * innerLocalView;
 
         // Project 4D hypercube vertices to 3D (perspective along W axis)
+        // Apply innerYawW rotation in XW plane to the vertices before projection
         std::array<glm::vec3, 16> hcVerts3D;
+        float cwRad = glm::radians(innerYawW);
+        float cw = cos(cwRad), sw = sin(cwRad);
         for (int i = 0; i < 16; i++) {
-            float pw = hcVerts4D[i].w - innerCamW;
+            // Rotate in XW plane (4D rotation around Y-Z axis)
+            float vx = cw * hcVerts4D[i].x + sw * hcVerts4D[i].w;
+            float vw = -sw * hcVerts4D[i].x + cw * hcVerts4D[i].w;
+            float vy = hcVerts4D[i].y;
+            float vz = hcVerts4D[i].z;
+
+            // Standard W-perspective projection
+            float pw = vw - innerCamW;
             float denom = viewDist4D - pw;
             if (std::abs(denom) < 1e-4f) denom = 1e-4f;
             float f = viewDist4D / denom;
-            hcVerts3D[i] = glm::vec3(f * hcVerts4D[i].x, f * hcVerts4D[i].y, f * hcVerts4D[i].z);
+            hcVerts3D[i] = glm::vec3(f * vx, f * vy, f * vz);
         }
 
         // Color function for W-axis (blue=W-, yellow=W+)
