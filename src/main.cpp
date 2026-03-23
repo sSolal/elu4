@@ -5,6 +5,8 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 #include <cmath>
+#include <array>
+#include <vector>
 #include "Shader.h"
 
 const unsigned int SCR_WIDTH = 800;
@@ -98,128 +100,6 @@ int main() {
         20, 21, 22, 20, 22, 23  // Bottom
     };
 
-    // Inner scene cubes (3 cubes, each scaled 0.2, at different positions)
-    // Cube 1: orange, at (0.3, 0, 0.1), scale 0.2
-    // Cube 2: purple, at (-0.25, 0.15, -0.2), scale 0.2
-    // Cube 3: teal, at (0, -0.2, 0.3), scale 0.2
-    float innerVertices[] = {
-        // Cube 1 (orange) - Front
-        0.3f - 0.1f, -0.1f, 0.1f + 0.1f,  1.0f, 0.5f, 0.0f,
-        0.3f + 0.1f, -0.1f, 0.1f + 0.1f,  1.0f, 0.5f, 0.0f,
-        0.3f + 0.1f, 0.1f,  0.1f + 0.1f,  1.0f, 0.5f, 0.0f,
-        0.3f - 0.1f, 0.1f,  0.1f + 0.1f,  1.0f, 0.5f, 0.0f,
-        // Cube 1 - Back
-        0.3f + 0.1f, -0.1f, 0.1f - 0.1f,  1.0f, 0.5f, 0.0f,
-        0.3f - 0.1f, -0.1f, 0.1f - 0.1f,  1.0f, 0.5f, 0.0f,
-        0.3f - 0.1f, 0.1f,  0.1f - 0.1f,  1.0f, 0.5f, 0.0f,
-        0.3f + 0.1f, 0.1f,  0.1f - 0.1f,  1.0f, 0.5f, 0.0f,
-        // Cube 1 - Left
-        0.3f - 0.1f, -0.1f, 0.1f - 0.1f,  1.0f, 0.5f, 0.0f,
-        0.3f - 0.1f, -0.1f, 0.1f + 0.1f,  1.0f, 0.5f, 0.0f,
-        0.3f - 0.1f, 0.1f,  0.1f + 0.1f,  1.0f, 0.5f, 0.0f,
-        0.3f - 0.1f, 0.1f,  0.1f - 0.1f,  1.0f, 0.5f, 0.0f,
-        // Cube 1 - Right
-        0.3f + 0.1f, -0.1f, 0.1f + 0.1f,  1.0f, 0.5f, 0.0f,
-        0.3f + 0.1f, -0.1f, 0.1f - 0.1f,  1.0f, 0.5f, 0.0f,
-        0.3f + 0.1f, 0.1f,  0.1f - 0.1f,  1.0f, 0.5f, 0.0f,
-        0.3f + 0.1f, 0.1f,  0.1f + 0.1f,  1.0f, 0.5f, 0.0f,
-        // Cube 1 - Top
-        0.3f - 0.1f, 0.1f,  0.1f + 0.1f,  1.0f, 0.5f, 0.0f,
-        0.3f + 0.1f, 0.1f,  0.1f + 0.1f,  1.0f, 0.5f, 0.0f,
-        0.3f + 0.1f, 0.1f,  0.1f - 0.1f,  1.0f, 0.5f, 0.0f,
-        0.3f - 0.1f, 0.1f,  0.1f - 0.1f,  1.0f, 0.5f, 0.0f,
-        // Cube 1 - Bottom
-        0.3f - 0.1f, -0.1f, 0.1f - 0.1f,  1.0f, 0.5f, 0.0f,
-        0.3f + 0.1f, -0.1f, 0.1f - 0.1f,  1.0f, 0.5f, 0.0f,
-        0.3f + 0.1f, -0.1f, 0.1f + 0.1f,  1.0f, 0.5f, 0.0f,
-        0.3f - 0.1f, -0.1f, 0.1f + 0.1f,  1.0f, 0.5f, 0.0f,
-
-        // Cube 2 (purple) - Front
-        -0.25f - 0.1f, 0.15f - 0.1f, -0.2f + 0.1f,  1.0f, 0.0f, 1.0f,
-        -0.25f + 0.1f, 0.15f - 0.1f, -0.2f + 0.1f,  1.0f, 0.0f, 1.0f,
-        -0.25f + 0.1f, 0.15f + 0.1f, -0.2f + 0.1f,  1.0f, 0.0f, 1.0f,
-        -0.25f - 0.1f, 0.15f + 0.1f, -0.2f + 0.1f,  1.0f, 0.0f, 1.0f,
-        // Cube 2 - Back
-        -0.25f + 0.1f, 0.15f - 0.1f, -0.2f - 0.1f,  1.0f, 0.0f, 1.0f,
-        -0.25f - 0.1f, 0.15f - 0.1f, -0.2f - 0.1f,  1.0f, 0.0f, 1.0f,
-        -0.25f - 0.1f, 0.15f + 0.1f, -0.2f - 0.1f,  1.0f, 0.0f, 1.0f,
-        -0.25f + 0.1f, 0.15f + 0.1f, -0.2f - 0.1f,  1.0f, 0.0f, 1.0f,
-        // Cube 2 - Left
-        -0.25f - 0.1f, 0.15f - 0.1f, -0.2f - 0.1f,  1.0f, 0.0f, 1.0f,
-        -0.25f - 0.1f, 0.15f - 0.1f, -0.2f + 0.1f,  1.0f, 0.0f, 1.0f,
-        -0.25f - 0.1f, 0.15f + 0.1f, -0.2f + 0.1f,  1.0f, 0.0f, 1.0f,
-        -0.25f - 0.1f, 0.15f + 0.1f, -0.2f - 0.1f,  1.0f, 0.0f, 1.0f,
-        // Cube 2 - Right
-        -0.25f + 0.1f, 0.15f - 0.1f, -0.2f + 0.1f,  1.0f, 0.0f, 1.0f,
-        -0.25f + 0.1f, 0.15f - 0.1f, -0.2f - 0.1f,  1.0f, 0.0f, 1.0f,
-        -0.25f + 0.1f, 0.15f + 0.1f, -0.2f - 0.1f,  1.0f, 0.0f, 1.0f,
-        -0.25f + 0.1f, 0.15f + 0.1f, -0.2f + 0.1f,  1.0f, 0.0f, 1.0f,
-        // Cube 2 - Top
-        -0.25f - 0.1f, 0.15f + 0.1f, -0.2f + 0.1f,  1.0f, 0.0f, 1.0f,
-        -0.25f + 0.1f, 0.15f + 0.1f, -0.2f + 0.1f,  1.0f, 0.0f, 1.0f,
-        -0.25f + 0.1f, 0.15f + 0.1f, -0.2f - 0.1f,  1.0f, 0.0f, 1.0f,
-        -0.25f - 0.1f, 0.15f + 0.1f, -0.2f - 0.1f,  1.0f, 0.0f, 1.0f,
-        // Cube 2 - Bottom
-        -0.25f - 0.1f, 0.15f - 0.1f, -0.2f - 0.1f,  1.0f, 0.0f, 1.0f,
-        -0.25f + 0.1f, 0.15f - 0.1f, -0.2f - 0.1f,  1.0f, 0.0f, 1.0f,
-        -0.25f + 0.1f, 0.15f - 0.1f, -0.2f + 0.1f,  1.0f, 0.0f, 1.0f,
-        -0.25f - 0.1f, 0.15f - 0.1f, -0.2f + 0.1f,  1.0f, 0.0f, 1.0f,
-
-        // Cube 3 (teal) - Front
-        0.0f - 0.1f, -0.2f - 0.1f, 0.3f + 0.1f,  0.0f, 1.0f, 1.0f,
-        0.0f + 0.1f, -0.2f - 0.1f, 0.3f + 0.1f,  0.0f, 1.0f, 1.0f,
-        0.0f + 0.1f, -0.2f + 0.1f, 0.3f + 0.1f,  0.0f, 1.0f, 1.0f,
-        0.0f - 0.1f, -0.2f + 0.1f, 0.3f + 0.1f,  0.0f, 1.0f, 1.0f,
-        // Cube 3 - Back
-        0.0f + 0.1f, -0.2f - 0.1f, 0.3f - 0.1f,  0.0f, 1.0f, 1.0f,
-        0.0f - 0.1f, -0.2f - 0.1f, 0.3f - 0.1f,  0.0f, 1.0f, 1.0f,
-        0.0f - 0.1f, -0.2f + 0.1f, 0.3f - 0.1f,  0.0f, 1.0f, 1.0f,
-        0.0f + 0.1f, -0.2f + 0.1f, 0.3f - 0.1f,  0.0f, 1.0f, 1.0f,
-        // Cube 3 - Left
-        0.0f - 0.1f, -0.2f - 0.1f, 0.3f - 0.1f,  0.0f, 1.0f, 1.0f,
-        0.0f - 0.1f, -0.2f - 0.1f, 0.3f + 0.1f,  0.0f, 1.0f, 1.0f,
-        0.0f - 0.1f, -0.2f + 0.1f, 0.3f + 0.1f,  0.0f, 1.0f, 1.0f,
-        0.0f - 0.1f, -0.2f + 0.1f, 0.3f - 0.1f,  0.0f, 1.0f, 1.0f,
-        // Cube 3 - Right
-        0.0f + 0.1f, -0.2f - 0.1f, 0.3f + 0.1f,  0.0f, 1.0f, 1.0f,
-        0.0f + 0.1f, -0.2f - 0.1f, 0.3f - 0.1f,  0.0f, 1.0f, 1.0f,
-        0.0f + 0.1f, -0.2f + 0.1f, 0.3f - 0.1f,  0.0f, 1.0f, 1.0f,
-        0.0f + 0.1f, -0.2f + 0.1f, 0.3f + 0.1f,  0.0f, 1.0f, 1.0f,
-        // Cube 3 - Top
-        0.0f - 0.1f, -0.2f + 0.1f, 0.3f + 0.1f,  0.0f, 1.0f, 1.0f,
-        0.0f + 0.1f, -0.2f + 0.1f, 0.3f + 0.1f,  0.0f, 1.0f, 1.0f,
-        0.0f + 0.1f, -0.2f + 0.1f, 0.3f - 0.1f,  0.0f, 1.0f, 1.0f,
-        0.0f - 0.1f, -0.2f + 0.1f, 0.3f - 0.1f,  0.0f, 1.0f, 1.0f,
-        // Cube 3 - Bottom
-        0.0f - 0.1f, -0.2f - 0.1f, 0.3f - 0.1f,  0.0f, 1.0f, 1.0f,
-        0.0f + 0.1f, -0.2f - 0.1f, 0.3f - 0.1f,  0.0f, 1.0f, 1.0f,
-        0.0f + 0.1f, -0.2f - 0.1f, 0.3f + 0.1f,  0.0f, 1.0f, 1.0f,
-        0.0f - 0.1f, -0.2f - 0.1f, 0.3f + 0.1f,  0.0f, 1.0f, 1.0f,
-    };
-
-    unsigned int innerIndices[] = {
-        0, 1, 2,  0, 2, 3,    // Cube 1 Front
-        4, 5, 6,  4, 6, 7,    // Cube 1 Back
-        8, 9, 10, 8, 10, 11,  // Cube 1 Left
-        12, 13, 14, 12, 14, 15, // Cube 1 Right
-        16, 17, 18, 16, 18, 19, // Cube 1 Top
-        20, 21, 22, 20, 22, 23, // Cube 1 Bottom
-
-        24, 25, 26, 24, 26, 27, // Cube 2 Front
-        28, 29, 30, 28, 30, 31, // Cube 2 Back
-        32, 33, 34, 32, 34, 35, // Cube 2 Left
-        36, 37, 38, 36, 38, 39, // Cube 2 Right
-        40, 41, 42, 40, 42, 43, // Cube 2 Top
-        44, 45, 46, 44, 46, 47, // Cube 2 Bottom
-
-        48, 49, 50, 48, 50, 51, // Cube 3 Front
-        52, 53, 54, 52, 54, 55, // Cube 3 Back
-        56, 57, 58, 56, 58, 59, // Cube 3 Left
-        60, 61, 62, 60, 62, 63, // Cube 3 Right
-        64, 65, 66, 64, 66, 67, // Cube 3 Top
-        68, 69, 70, 68, 70, 71  // Cube 3 Bottom
-    };
-
     unsigned int VAO, VBO, EBO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
@@ -243,22 +123,18 @@ int main() {
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 
-    // Inner scene VAO
-    unsigned int innerVAO, innerVBO, innerEBO;
-    glGenVertexArrays(1, &innerVAO);
-    glGenBuffers(1, &innerVBO);
-    glGenBuffers(1, &innerEBO);
+    // Hypercube (tesseract) VAO — dynamic, updated each frame
+    unsigned int hcVAO, hcVBO;
+    glGenVertexArrays(1, &hcVAO);
+    glGenBuffers(1, &hcVBO);
 
-    glBindVertexArray(innerVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, innerVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(innerVertices), innerVertices, GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, innerEBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(innerIndices), innerIndices, GL_STATIC_DRAW);
+    glBindVertexArray(hcVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, hcVBO);
+    // 32 edges * 2 vertices * 6 floats (pos + color)
+    glBufferData(GL_ARRAY_BUFFER, 32 * 2 * 6 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
 
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
-
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
@@ -278,11 +154,33 @@ int main() {
     float cameraSpeed = 5.0f;
     float lookSpeed = 60.0f;
 
-    // Inner camera state
+    // Inner camera state (3D position + 4D W coordinate)
     glm::vec3 innerCamPos = glm::vec3(0.0f, 0.0f, 0.0f);
     glm::vec3 innerCameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
     float innerYaw = 0.0f;
     float innerPitch = 0.0f;
+    float innerCamW = 0.0f;
+
+    // 4D hypercube (tesseract) geometry
+    const float HS = 0.3f;         // half-size in each 4D dimension
+    const float viewDist4D = 1.5f; // 4D perspective focal distance
+
+    // 16 vertices: all (±HS, ±HS, ±HS, ±HS)
+    std::array<glm::vec4, 16> hcVerts4D;
+    {
+        int vi = 0;
+        for (int x : {-1, 1}) for (int y : {-1, 1}) for (int z : {-1, 1}) for (int w : {-1, 1})
+            hcVerts4D[vi++] = glm::vec4(x*HS, y*HS, z*HS, w*HS);
+    }
+
+    // 32 edges: vertices differing in exactly 1 coordinate
+    std::vector<std::pair<int,int>> hcEdges;
+    for (int i = 0; i < 16; i++)
+        for (int j = i+1; j < 16; j++) {
+            glm::vec4 d = hcVerts4D[i] - hcVerts4D[j];
+            int diffs = (d.x != 0) + (d.y != 0) + (d.z != 0) + (d.w != 0);
+            if (diffs == 1) hcEdges.push_back({i, j});
+        }
 
     // Mode toggle
     bool insideMode = false;
@@ -355,18 +253,19 @@ int main() {
             glm::vec3 innerRight = glm::normalize(glm::cross(innerCameraFront, innerCameraUp));
 
             float speed = cameraSpeed * deltaTime;
-            if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-                innerCamPos += speed * innerCameraFront;
-            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-                innerCamPos -= speed * innerCameraFront;
-            if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-                innerCamPos -= speed * innerRight;
-            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-                innerCamPos += speed * innerRight;
-            if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-                innerCamPos += speed * innerCameraUp;
-            if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
-                innerCamPos -= speed * innerCameraUp;
+
+            // Horizontal movement (XZ plane) with QSDF
+            glm::vec3 flatFront = glm::normalize(glm::vec3(innerCameraFront.x, 0.0f, innerCameraFront.z));
+            glm::vec3 flatRight = glm::normalize(glm::cross(flatFront, innerCameraUp));
+
+            if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS) innerCamPos += speed * flatFront;
+            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) innerCamPos -= speed * flatFront;
+            if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) innerCamPos -= speed * flatRight;
+            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) innerCamPos += speed * flatRight;
+
+            // 4th dimension movement with E/R
+            if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) innerCamW += speed;
+            if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) innerCamW -= speed;
         }
 
         // Render
@@ -399,11 +298,38 @@ int main() {
         // Inner scene: inner view places objects in cube space, outer view/proj renders them
         glm::mat4 innerMVP = projection * outerView * innerLocalView;
 
+        // Project 4D hypercube vertices to 3D (perspective along W axis)
+        std::array<glm::vec3, 16> hcVerts3D;
+        for (int i = 0; i < 16; i++) {
+            float pw = hcVerts4D[i].w - innerCamW;
+            float denom = viewDist4D - pw;
+            if (std::abs(denom) < 1e-4f) denom = 1e-4f;
+            float f = viewDist4D / denom;
+            hcVerts3D[i] = glm::vec3(f * hcVerts4D[i].x, f * hcVerts4D[i].y, f * hcVerts4D[i].z);
+        }
+
+        // Build interleaved line buffer (color: blue=W-, yellow=W+)
+        std::vector<float> lineData;
+        lineData.reserve(hcEdges.size() * 2 * 6);
+        for (auto& [a, b] : hcEdges) {
+            auto wColor = [&](int idx) {
+                float t = (hcVerts4D[idx].w + HS) / (2.0f * HS);
+                return glm::mix(glm::vec3(0.2f, 0.4f, 1.0f), glm::vec3(1.0f, 0.8f, 0.2f), t);
+            };
+            glm::vec3 pa = hcVerts3D[a], ca = wColor(a);
+            glm::vec3 pb = hcVerts3D[b], cb = wColor(b);
+            lineData.insert(lineData.end(), {pa.x, pa.y, pa.z, ca.r, ca.g, ca.b});
+            lineData.insert(lineData.end(), {pb.x, pb.y, pb.z, cb.r, cb.g, cb.b});
+        }
+        glBindBuffer(GL_ARRAY_BUFFER, hcVBO);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, (GLsizeiptr)(lineData.size() * sizeof(float)), lineData.data());
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+
         innerShader.use();
         innerShader.setMat4("MVP", innerMVP);
         innerShader.setMat4("innerView", innerLocalView);
-        glBindVertexArray(innerVAO);
-        glDrawElements(GL_TRIANGLES, 72, GL_UNSIGNED_INT, 0);
+        glBindVertexArray(hcVAO);
+        glDrawArrays(GL_LINES, 0, (GLsizei)(hcEdges.size() * 2));
 
         // Pass 2: Wireframe outer cube
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -423,9 +349,8 @@ int main() {
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
     glDeleteBuffers(1, &EBO);
-    glDeleteVertexArrays(1, &innerVAO);
-    glDeleteBuffers(1, &innerVBO);
-    glDeleteBuffers(1, &innerEBO);
+    glDeleteVertexArrays(1, &hcVAO);
+    glDeleteBuffers(1, &hcVBO);
     glfwTerminate();
 
     return 0;
