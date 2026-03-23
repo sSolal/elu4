@@ -176,7 +176,7 @@ int main() {
     float lookSpeed = 60.0f;
 
     // Inner camera state (single 4D position + orientation angles)
-    glm::vec4 innerCam4D = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
+    glm::vec4 innerCam4D = glm::vec4(0.0f, 0.5f, 0.0f, 5.0f);
     float innerYawZ = 0.0f;
     float innerYawW = 0.0f;
     float innerPitch = 0.0f;
@@ -276,21 +276,15 @@ int main() {
 
     std::vector<Instance4D> instances;
 
-    // Ground grid: hypercubes at y = -HS (below ground level)
-    std::vector<glm::vec3> groundColors = {
-        glm::vec3(0.6f, 0.3f, 0.3f), glm::vec3(0.8f, 0.5f, 0.3f),
-        glm::vec3(0.3f, 0.6f, 0.3f), glm::vec3(0.3f, 0.6f, 0.6f),
-        glm::vec3(0.5f, 0.3f, 0.6f)
-    };
-    int groundColorIdx = 0;
-    for (float x = -1.8f; x <= 1.8f; x += 0.6f) {
-        for (float z = -1.8f; z <= 1.8f; z += 0.6f) {
-            glm::vec3 colA = groundColors[groundColorIdx % groundColors.size()];
-            glm::vec3 colB = groundColors[(groundColorIdx + 1) % groundColors.size()];
-            instances.push_back({{x, -HS, z, 0.0f}, 0.0f, 0.0f, 0.0f,
-                                 colA, colB,
-                                 &hcVerts4D, 16, &hcEdges, &hcFaceIndices});
-            groundColorIdx++;
+    // Ground grid: hypercubes at y = -HS (below ground level), 9x9x9
+    glm::vec3 groundGray = glm::vec3(0.5f, 0.5f, 0.5f);
+    for (float x = -2.4f; x <= 2.4f; x += 0.6f) {
+        for (float z = -2.4f; z <= 2.4f; z += 0.6f) {
+            for (float w = -2.4f; w <= 2.4f; w += 0.6f) {
+                instances.push_back({{x, -HS, z, w}, 0.0f, 0.0f, 0.0f,
+                                     groundGray, groundGray,
+                                     &hcVerts4D, 16, &hcEdges, &hcFaceIndices});
+            }
         }
     }
 
@@ -390,8 +384,8 @@ int main() {
             float fwdX = cxw,       fwdW =  sxw;                           // camera X (forward)
             // Camera Z-axis → world: XW and ZW rotations affect Z
             float rgtX = -sxw*szw,  rgtZ = czw,  rgtW = cxw*szw;          // camera Z (strafe)
-            // Camera W-axis → world: all three rotations affect W
-            float advX = -sxw*czw*cyw, advY = -syw, advZ = -szw*cyw, advW = cxw*czw*cyw; // camera W (advance)
+            // Camera W-axis → world: clamped to XZW plane (no Y component, for FPS-style horizontal movement)
+            float advX = -sxw*czw, advZ = -szw, advW = cxw*czw;           // camera W (advance, Y-clamped)
 
             // E/A: forward/back (camera X direction)
             if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
@@ -405,11 +399,11 @@ int main() {
             if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
                 { innerCam4D.x += speed*rgtX; innerCam4D.z += speed*rgtZ; innerCam4D.w += speed*rgtW; }
 
-            // W/S: advance/retreat (camera W direction — into 4th dimension)
+            // W/S: advance/retreat (camera W direction — into 4th dimension, clamped to XZW plane)
             if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-                { innerCam4D.x += speed*advX; innerCam4D.y += speed*advY; innerCam4D.z += speed*advZ; innerCam4D.w += speed*advW; }
+                { innerCam4D.x += speed*advX; innerCam4D.z += speed*advZ; innerCam4D.w += speed*advW; }
             if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-                { innerCam4D.x -= speed*advX; innerCam4D.y -= speed*advY; innerCam4D.z -= speed*advZ; innerCam4D.w -= speed*advW; }
+                { innerCam4D.x -= speed*advX; innerCam4D.z -= speed*advZ; innerCam4D.w -= speed*advW; }
         }
 
         // Render
