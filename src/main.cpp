@@ -50,6 +50,8 @@ int main() {
     glEnable(GL_CLIP_DISTANCE3);
     glEnable(GL_CLIP_DISTANCE4);
     glEnable(GL_CLIP_DISTANCE5);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     // Cube vertices (pos + color), 6 faces x 4 vertices
     float vertices[] = {
@@ -141,6 +143,25 @@ int main() {
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 
+    // Face VAO for tesseract faces (solid, transparent)
+    unsigned int faceVAO, faceVBO, faceEBO;
+    glGenVertexArrays(1, &faceVAO);
+    glGenBuffers(1, &faceVBO);
+    glGenBuffers(1, &faceEBO);
+
+    glBindVertexArray(faceVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, faceVBO);
+    // 16 vertices × 6 floats (pos + color), dynamic
+    glBufferData(GL_ARRAY_BUFFER, 16 * 6 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6*sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6*sizeof(float), (void*)(3*sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, faceEBO);
+    // Face indices will be set up below after computing them
+    glBindVertexArray(0);
+
     // Load shaders
     Shader shader("shaders/square.vert", "shaders/square.frag");
     Shader innerShader("shaders/inner.vert", "shaders/inner.frag");
@@ -181,6 +202,29 @@ int main() {
             int diffs = (d.x != 0) + (d.y != 0) + (d.z != 0) + (d.w != 0);
             if (diffs == 1) hcEdges.push_back({i, j});
         }
+
+    // 24 faces of tesseract: choose 2 varying axes, fix other 2 at ±1
+    // Bit layout: bit3=x, bit2=y, bit1=z, bit0=w
+    std::vector<unsigned int> hcFaceIndices;
+    for (int a = 0; a < 4; a++) for (int b = a+1; b < 4; b++) {
+        // c, d are the fixed axes
+        int fixed[2]; int fi = 0;
+        for (int ax = 0; ax < 4; ax++) if (ax != a && ax != b) fixed[fi++] = ax;
+        int c = fixed[0], d = fixed[1];
+        for (int sc : {0,1}) for (int sd : {0,1}) {
+            int base = (sc << c) | (sd << d);
+            int v0=base, v1=base|(1<<a), v2=base|(1<<a)|(1<<b), v3=base|(1<<b);
+            hcFaceIndices.insert(hcFaceIndices.end(), {(unsigned)v0,(unsigned)v1,(unsigned)v2,
+                                                        (unsigned)v0,(unsigned)v2,(unsigned)v3});
+        }
+    }
+
+    // Upload face indices to EBO
+    glBindBuffer(GL_COPY_READ_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, faceEBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, hcFaceIndices.size()*sizeof(unsigned int),
+                 hcFaceIndices.data(), GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
     // Mode toggle
     bool insideMode = false;
@@ -308,14 +352,27 @@ int main() {
             hcVerts3D[i] = glm::vec3(f * hcVerts4D[i].x, f * hcVerts4D[i].y, f * hcVerts4D[i].z);
         }
 
+        // Color function for W-axis (blue=W-, yellow=W+)
+        auto wColor = [&](int idx) {
+            float t = (hcVerts4D[idx].w + HS) / (2.0f * HS);
+            return glm::mix(glm::vec3(0.2f, 0.4f, 1.0f), glm::vec3(1.0f, 0.8f, 0.2f), t);
+        };
+
+        // Upload face vertex data
+        std::vector<float> faceVertData;
+        faceVertData.reserve(16 * 6);
+        for (int i = 0; i < 16; i++) {
+            glm::vec3 p = hcVerts3D[i], c = wColor(i);
+            faceVertData.insert(faceVertData.end(), {p.x, p.y, p.z, c.r, c.g, c.b});
+        }
+        glBindBuffer(GL_ARRAY_BUFFER, faceVBO);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, (GLsizeiptr)(faceVertData.size()*sizeof(float)), faceVertData.data());
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+
         // Build interleaved line buffer (color: blue=W-, yellow=W+)
         std::vector<float> lineData;
         lineData.reserve(hcEdges.size() * 2 * 6);
         for (auto& [a, b] : hcEdges) {
-            auto wColor = [&](int idx) {
-                float t = (hcVerts4D[idx].w + HS) / (2.0f * HS);
-                return glm::mix(glm::vec3(0.2f, 0.4f, 1.0f), glm::vec3(1.0f, 0.8f, 0.2f), t);
-            };
             glm::vec3 pa = hcVerts3D[a], ca = wColor(a);
             glm::vec3 pb = hcVerts3D[b], cb = wColor(b);
             lineData.insert(lineData.end(), {pa.x, pa.y, pa.z, ca.r, ca.g, ca.b});
@@ -325,7 +382,21 @@ int main() {
         glBufferSubData(GL_ARRAY_BUFFER, 0, (GLsizeiptr)(lineData.size() * sizeof(float)), lineData.data());
         glBindBuffer(GL_ARRAY_BUFFER, 0);
 
+        // Render transparent faces first
+        glDisable(GL_CULL_FACE);  // show both sides of faces
+        glDepthMask(GL_FALSE);    // don't write to depth buffer
+
         innerShader.use();
+        innerShader.setFloat("uAlpha", 0.2f);
+        innerShader.setMat4("MVP", innerMVP);
+        innerShader.setMat4("innerView", innerLocalView);
+        glBindVertexArray(faceVAO);
+        glDrawElements(GL_TRIANGLES, (GLsizei)hcFaceIndices.size(), GL_UNSIGNED_INT, 0);
+
+        glDepthMask(GL_TRUE);
+
+        // Then draw edges (opaque lines) on top
+        innerShader.setFloat("uAlpha", 1.0f);
         innerShader.setMat4("MVP", innerMVP);
         innerShader.setMat4("innerView", innerLocalView);
         glBindVertexArray(hcVAO);
@@ -351,6 +422,9 @@ int main() {
     glDeleteBuffers(1, &EBO);
     glDeleteVertexArrays(1, &hcVAO);
     glDeleteBuffers(1, &hcVBO);
+    glDeleteVertexArrays(1, &faceVAO);
+    glDeleteBuffers(1, &faceVBO);
+    glDeleteBuffers(1, &faceEBO);
     glfwTerminate();
 
     return 0;
