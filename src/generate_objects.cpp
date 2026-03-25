@@ -40,10 +40,9 @@ void generateHypercube() {
                     int d2 = j ^ k;
                     if (__builtin_popcount(d1) == 1 && __builtin_popcount(d2) == 1) {
                         int l = i ^ j ^ k;
-                        // Found a square: i, j, k, l
+                        // Found a square: i, k, j, l (cyclic order - k and l adjacent to i in different dimensions)
                         if (i < j && i < k && i < l) {
-                            std::vector<int> face = {i, j, k, l};
-                            std::sort(face.begin(), face.end());
+                            std::vector<int> face = {i, k, j, l};  // Proper cyclic order: i -> k -> j -> l -> i
                             hypercube.cells.push_back(face);
                         }
                         break;
@@ -53,13 +52,25 @@ void generateHypercube() {
         }
     }
 
-    // Remove duplicates from cells
-    std::sort(hypercube.cells.begin(), hypercube.cells.end());
-    hypercube.cells.erase(std::unique(hypercube.cells.begin(), hypercube.cells.end()), hypercube.cells.end());
+    // No need to deduplicate - we track with i < j && i < k && i < l to ensure uniqueness
+
+    // Convert quads to triangles (same as game): (v0,v1,v2) + (v0,v2,v3)
+    for (const auto& quad : hypercube.cells) {
+        if (quad.size() == 4) {
+            hypercube.triangleIndices.push_back(quad[0]);
+            hypercube.triangleIndices.push_back(quad[1]);
+            hypercube.triangleIndices.push_back(quad[2]);
+
+            hypercube.triangleIndices.push_back(quad[0]);
+            hypercube.triangleIndices.push_back(quad[2]);
+            hypercube.triangleIndices.push_back(quad[3]);
+        }
+    }
 
     hypercube.saveToJSON("hypercube.json");
     std::cout << "Generated hypercube.json with " << hypercube.vertices.size() << " vertices, "
-              << hypercube.edges.size() << " edges, and " << hypercube.cells.size() << " cells" << std::endl;
+              << hypercube.edges.size() << " edges, " << hypercube.cells.size() << " quads, and "
+              << (hypercube.triangleIndices.size() / 3) << " triangles" << std::endl;
 }
 
 void generateHypersphere() {
@@ -67,8 +78,9 @@ void generateHypersphere() {
     hypersphere.name = "Hypersphere";
 
     // Generate points on a 3-sphere (unit hypersphere in 4D)
-    // Using parametrization with 3 angles (similar to spherical coords)
-    int resolution = 4;  // Low resolution: 4x4x4 = 64 vertices
+    // Using proper Hopf coordinates: S^3 -> S^2 x S^1
+    // (w, x, y, z) = (cos(θ)cos(φ), cos(θ)sin(φ)cos(ψ), cos(θ)sin(φ)sin(ψ), sin(θ))
+    int resolution = 5;  // 5x5x5 = 125 vertices
     float radius = 0.5f;
 
     int vertexIndex = 0;
@@ -77,16 +89,23 @@ void generateHypersphere() {
     for (int i = 0; i < resolution; i++) {
         for (int j = 0; j < resolution; j++) {
             for (int k = 0; k < resolution; k++) {
-                float u = (i / (float)(resolution - 1)) * M_PI;      // 0 to pi
-                float v = (j / (float)(resolution - 1)) * 2.0f * M_PI;  // 0 to 2pi
-                float w = (k / (float)(resolution - 1)) * 2.0f * M_PI;  // 0 to 2pi
+                float theta = (i / (float)(resolution - 1)) * M_PI;       // 0 to π
+                float phi = (j / (float)(resolution - 1)) * M_PI;         // 0 to π
+                float psi = (k / (float)(resolution - 1)) * 2.0f * M_PI;  // 0 to 2π
 
-                float x = radius * std::sin(u) * std::cos(v);
-                float y = radius * std::sin(u) * std::sin(v);
-                float z = radius * std::cos(u) * std::cos(w);
-                float wc = radius * std::cos(u) * std::sin(w);
+                float cosTheta = std::cos(theta);
+                float sinTheta = std::sin(theta);
+                float cosPhi = std::cos(phi);
+                float sinPhi = std::sin(phi);
+                float cosPsi = std::cos(psi);
+                float sinPsi = std::sin(psi);
 
-                hypersphere.vertices.push_back(glm::vec4(x, y, z, wc));
+                float w = radius * cosTheta * cosPhi;
+                float x = radius * cosTheta * sinPhi * cosPsi;
+                float y = radius * cosTheta * sinPhi * sinPsi;
+                float z = radius * sinTheta;
+
+                hypersphere.vertices.push_back(glm::vec4(x, y, z, w));
                 grid[i][j][k] = vertexIndex++;
             }
         }
@@ -124,9 +143,23 @@ void generateHypersphere() {
         }
     }
 
+    // Convert quads to triangles
+    for (const auto& quad : hypersphere.cells) {
+        if (quad.size() == 4) {
+            hypersphere.triangleIndices.push_back(quad[0]);
+            hypersphere.triangleIndices.push_back(quad[1]);
+            hypersphere.triangleIndices.push_back(quad[2]);
+
+            hypersphere.triangleIndices.push_back(quad[0]);
+            hypersphere.triangleIndices.push_back(quad[2]);
+            hypersphere.triangleIndices.push_back(quad[3]);
+        }
+    }
+
     hypersphere.saveToJSON("hypersphere.json");
     std::cout << "Generated hypersphere.json with " << hypersphere.vertices.size() << " vertices, "
-              << hypersphere.edges.size() << " edges, and " << hypersphere.cells.size() << " cells" << std::endl;
+              << hypersphere.edges.size() << " edges, " << hypersphere.cells.size() << " quads, and "
+              << (hypersphere.triangleIndices.size() / 3) << " triangles" << std::endl;
 }
 
 int main() {

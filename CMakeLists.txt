@@ -21,6 +21,7 @@ add_executable(game
 
 add_executable(visualizer
     src/visualizer_main.cpp
+    src/Visualizer.cpp
     src/Shader.cpp
     src/Object4D.cpp
     src/Camera.cpp
