@@ -19,11 +19,37 @@ add_executable(game
     src/Renderer.cpp
 )
 
+add_executable(visualizer
+    src/visualizer_main.cpp
+    src/Shader.cpp
+    src/Object4D.cpp
+    src/Camera.cpp
+    src/physics.cpp
+)
+
+add_executable(generate_objects
+    src/generate_objects.cpp
+    src/Object4D.cpp
+)
+
 target_include_directories(game PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(visualizer PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(generate_objects PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
 target_link_libraries(game
     OpenGL::OpenGL
     GLEW::GLEW
     glfw
+    glm::glm
+)
+
+target_link_libraries(visualizer
+    OpenGL::OpenGL
+    GLEW::GLEW
+    glfw
+    glm::glm
+)
+
+target_link_libraries(generate_objects
     glm::glm
 )
