@@ -13,6 +13,10 @@ add_executable(game
     src/main.cpp
     src/Shader.cpp
     src/physics.cpp
+    src/Camera.cpp
+    src/Tesseract.cpp
+    src/Scene.cpp
+    src/Renderer.cpp
 )
 
 target_include_directories(game PRIVATE ${CMAKE_SOURCE_DIR}/src)
