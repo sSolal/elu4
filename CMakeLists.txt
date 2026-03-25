@@ -16,7 +16,17 @@ add_executable(game
     src/Camera.cpp
     src/Tesseract.cpp
     src/Scene.cpp
+    src/Level2.cpp
     src/Renderer.cpp
+    src/Object4D.cpp
+    src/ObjectBuffer.cpp
+    src/Menu.cpp
+    src/imgui/imgui.cpp
+    src/imgui/imgui_draw.cpp
+    src/imgui/imgui_widgets.cpp
+    src/imgui/imgui_tables.cpp
+    src/imgui/backends/imgui_impl_glfw.cpp
+    src/imgui/backends/imgui_impl_opengl3.cpp
 )
 
 add_executable(visualizer
@@ -38,7 +48,7 @@ add_executable(4dg
     src/Object4D.cpp
 )
 
-target_include_directories(game PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(game PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/imgui ${CMAKE_SOURCE_DIR}/src/imgui/backends)
 target_include_directories(visualizer PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_include_directories(generate_objects PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_include_directories(4dg PRIVATE ${CMAKE_SOURCE_DIR}/src)

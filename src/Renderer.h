@@ -7,6 +7,8 @@
 #include "Scene.h"
 #include "Tesseract.h"
 #include "Camera.h"
+#include "ObjectBuffer.h"
+#include "Level2.h"
 
 class Renderer {
 public:
@@ -20,6 +22,16 @@ public:
         const Camera4D::Angles& angles,
         float focalLength,
         const Tesseract& tesseract,
+        const glm::mat4& innerMVP
+    );
+
+    void drawObjects(
+        const std::vector<ObjectInstance>& instances,
+        const Object4D& obj,
+        ObjectBuffer& buf,
+        const Camera4D& cam4D,
+        const Camera4D::Angles& angles,
+        float focalLength,
         const glm::mat4& innerMVP
     );
 

@@ -80,6 +80,39 @@ void Renderer::drawScene(
     glDepthMask(GL_TRUE);
 }
 
+void Renderer::drawObjects(
+    const std::vector<ObjectInstance>& instances,
+    const Object4D& obj,
+    ObjectBuffer& buf,
+    const Camera4D& cam4D,
+    const Camera4D::Angles& angles,
+    float focalLength,
+    const glm::mat4& innerMVP
+) {
+    glDisable(GL_CULL_FACE);
+    glDepthMask(GL_FALSE);
+
+    innerShader.use();
+    innerShader.setFloat("uAlpha", 0.35f);
+    innerShader.setMat4("MVP", innerMVP);
+    innerShader.setMat4("innerView", glm::mat4(1.0f));
+
+    std::vector<float> objVertData;
+
+    for (const auto& inst : instances) {
+        // Project instance; skip if culled
+        if (!projectObjectInstance(obj, inst, cam4D.pos, angles, focalLength, objVertData)) {
+            continue;
+        }
+
+        // Upload and draw
+        buf.uploadVerts(objVertData);
+        buf.draw();
+    }
+
+    glDepthMask(GL_TRUE);
+}
+
 void Renderer::drawOuterCube(const glm::mat4& outerMVP) {
     wireShader.use();
     wireShader.setMat4("MVP", outerMVP);
