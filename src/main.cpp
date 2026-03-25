@@ -190,7 +190,7 @@ int main() {
 
     // 4D hypercube (tesseract) geometry
     const float HS = 0.3f;         // half-size in each 4D dimension
-    const float viewDist4D = 1.5f; // 4D perspective focal distance
+    float focalLength4D = 1.5f;    // 4D perspective focal distance (adjustable)
 
     // 16 vertices: all (±HS, ±HS, ±HS, ±HS)
     std::array<glm::vec4, 16> hcVerts4D;
@@ -342,6 +342,12 @@ int main() {
         }
         tabWasPressed = tabNow;
 
+        // Focal length adjustment (up/down arrow keys)
+        if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
+            focalLength4D = glm::min(10.0f, focalLength4D + 2.0f * deltaTime);
+        if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
+            focalLength4D = glm::max(0.1f, focalLength4D - 2.0f * deltaTime);
+
         if (!insideMode) {
             // Outside mode: control outer camera with IJKL (rotation) and WASD/EC (movement)
             if (glfwGetKey(window, GLFW_KEY_J)  == GLFW_PRESS) yaw   -= lookSpeed * deltaTime;
@@ -482,7 +488,7 @@ int main() {
             // W-perspective projection (camera looks along -W, like 3D looks along -Z)
             float negVw = -vw;
             if (negVw < 1e-4f) negVw = 1e-4f;  // clamp vertices at/behind camera
-            float f = viewDist4D / negVw;
+            float f = 1.0f / (negVw + focalLength4D);
             hcVerts3D[i] = glm::vec3(f * vx, f * vy, f * vz);
         }
 
@@ -514,6 +520,31 @@ int main() {
 
         // Draw all instance faces (translucent, no edges)
         for (auto& inst : instances) {
+            // Cull instances entirely behind the camera in W
+            bool behindCamera = true;
+            for (int i = 0; i < inst.vertCount; i++) {
+                glm::vec4 localV = (*inst.verts)[i];
+                float vx=localV.x, vy=localV.y, vz=localV.z, vw=localV.w;
+                // Local rotations (XZ, XW, ZW)
+                { float c=cos(inst.rotXZ), s=sin(inst.rotXZ);
+                  float nx=c*vx-s*vz, nz=s*vx+c*vz; vx=nx; vz=nz; }
+                { float c=cos(inst.rotXW), s=sin(inst.rotXW);
+                  float nx=c*vx-s*vw, nw=s*vx+c*vw; vx=nx; vw=nw; }
+                { float c=cos(inst.rotZW), s=sin(inst.rotZW);
+                  float nz=c*vz-s*vw, nw=s*vz+c*vw; vz=nz; vw=nw; }
+                // Translate + camera space
+                vx += inst.pos.x - innerCam4D.x;
+                vy += inst.pos.y - innerCam4D.y;
+                vz += inst.pos.z - innerCam4D.z;
+                vw += inst.pos.w - innerCam4D.w;
+                // Camera rotations
+                { float nx=cxw*vx+sxw*vw; float nw=-sxw*vx+cxw*vw; vx=nx; vw=nw; }
+                { float nz=czw*vz+szw*vw; float nw=-szw*vz+czw*vw; vz=nz; vw=nw; }
+                { float ny=cyw*vy+syw*vw; float nw=-syw*vy+cyw*vw; vy=ny; vw=nw; }
+                if (-vw > 0) behindCamera = false;
+            }
+            if (behindCamera) continue;
+
             std::vector<float> instVertData;
             for (int i = 0; i < inst.vertCount; i++) {
                 glm::vec4 localV = (*inst.verts)[i];
@@ -535,7 +566,7 @@ int main() {
                 { float nz=czw*vz+szw*vw; float nw=-szw*vz+czw*vw; vz=nz; vw=nw; }
                 { float ny=cyw*vy+syw*vw; float nw=-syw*vy+cyw*vw; vy=ny; vw=nw; }
                 float negVw=-vw; if(negVw<1e-4f) negVw=1e-4f;
-                float f=viewDist4D/negVw;
+                float f=1.0f/(negVw+focalLength4D);
                 glm::vec3 p(f*vx, f*vy, f*vz);
                 float t = (localV.w + HS) / (2.0f * HS);
                 if(t < 0.0f) t = 0.0f; if(t > 1.0f) t = 1.0f;
