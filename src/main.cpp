@@ -8,6 +8,7 @@
 #include <array>
 #include <vector>
 #include "Shader.h"
+#include "physics.h"
 
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
@@ -176,10 +177,16 @@ int main() {
     float lookSpeed = 60.0f;
 
     // Inner camera state (single 4D position + orientation angles)
-    glm::vec4 innerCam4D = glm::vec4(0.0f, 0.5f, 0.0f, 5.0f);
+    glm::vec4 innerCam4D = glm::vec4(0.0f, 2.5f, 0.0f, 0.0f);
     float innerYawZ = 0.0f;
     float innerYawW = 0.0f;
     float innerPitch = 0.0f;
+
+    // Physics objects
+    PhysicsBody playerBody;
+    playerBody.pos    = innerCam4D;
+    playerBody.radius = 0.75f;
+    PhysicsWorld physWorld;
 
     // 4D hypercube (tesseract) geometry
     const float HS = 0.3f;         // half-size in each 4D dimension
@@ -305,6 +312,11 @@ int main() {
                          glm::vec3(0.8f, 0.2f, 0.8f), glm::vec3(0.2f, 1.0f, 0.5f),
                          &hcVerts4D, 16, &hcEdges, &hcFaceIndices});
 
+    // Populate physics world with all instances
+    for (const auto& inst : instances) {
+        physWorld.addObject(inst.pos, HS);
+    }
+
     // Mode toggle
     bool insideMode = false;
     bool tabWasPressed = false;
@@ -387,23 +399,31 @@ int main() {
             // Camera W-axis → world: clamped to XZW plane (no Y component, for FPS-style horizontal movement)
             float advX = -sxw*czw, advZ = -szw, advW = cxw*czw;           // camera W (advance, Y-clamped)
 
+            // Accumulate desired movement from input (physics will resolve collisions)
+            glm::vec4 desiredMove(0.0f);
+
             // E/A: forward/back (camera X direction)
             if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
-                { innerCam4D.x += speed*fwdX; innerCam4D.w += speed*fwdW; }
+                { desiredMove.x += speed*fwdX; desiredMove.w += speed*fwdW; }
             if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-                { innerCam4D.x -= speed*fwdX; innerCam4D.w -= speed*fwdW; }
+                { desiredMove.x -= speed*fwdX; desiredMove.w -= speed*fwdW; }
 
             // Q/D: strafe left/right (camera Z direction)
             if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
-                { innerCam4D.x -= speed*rgtX; innerCam4D.z -= speed*rgtZ; innerCam4D.w -= speed*rgtW; }
+                { desiredMove.x -= speed*rgtX; desiredMove.z -= speed*rgtZ; desiredMove.w -= speed*rgtW; }
             if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-                { innerCam4D.x += speed*rgtX; innerCam4D.z += speed*rgtZ; innerCam4D.w += speed*rgtW; }
+                { desiredMove.x += speed*rgtX; desiredMove.z += speed*rgtZ; desiredMove.w += speed*rgtW; }
 
             // W/S: advance/retreat (camera W direction — into 4th dimension, clamped to XZW plane)
             if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-                { innerCam4D.x += speed*advX; innerCam4D.z += speed*advZ; innerCam4D.w += speed*advW; }
+                { desiredMove.x += speed*advX; desiredMove.z += speed*advZ; desiredMove.w += speed*advW; }
             if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-                { innerCam4D.x -= speed*advX; innerCam4D.z -= speed*advZ; innerCam4D.w -= speed*advW; }
+                { desiredMove.x -= speed*advX; desiredMove.z -= speed*advZ; desiredMove.w -= speed*advW; }
+
+            // Physics step
+            playerBody.pos = innerCam4D;
+            physWorld.step(playerBody, desiredMove, deltaTime);
+            innerCam4D = playerBody.pos;
         }
 
         // Render

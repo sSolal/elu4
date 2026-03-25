@@ -12,6 +12,7 @@ find_package(glm REQUIRED)
 add_executable(game
     src/main.cpp
     src/Shader.cpp
+    src/physics.cpp
 )
 
 target_include_directories(game PRIVATE ${CMAKE_SOURCE_DIR}/src)
