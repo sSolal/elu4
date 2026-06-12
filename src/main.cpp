@@ -20,6 +20,10 @@ const unsigned int SCR_HEIGHT = 600;
 
 int main() {
     // Init GLFW
+    // Force the X11 backend: GLEW queries OpenGL through GLX, which a native
+    // Wayland/EGL context doesn't provide, so glewInit() fails on Wayland
+    // sessions. XWayland supplies GLX, so this works everywhere.
+    glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW" << std::endl;
         return -1;
@@ -159,8 +163,8 @@ int main() {
             glm::mat4 outerMVP = projection * outerView;
             glm::mat4 innerMVP = projection * outerView;
 
-            auto angles = cam4D_L1.computeAngles();
-            renderer.drawScene(scene1, tesseract.buffers, cam4D_L1, angles, focalLength4D_L1, tesseract, innerMVP);
+            
+            renderer.drawScene(scene1, tesseract.buffers, cam4D_L1, cam4D_L1.getOrientation(), focalLength4D_L1, tesseract, innerMVP);
             renderer.drawOuterCube(outerMVP);
 
             // Render back button
@@ -203,11 +207,11 @@ int main() {
             glm::mat4 outerMVP = projection * outerView;
             glm::mat4 innerMVP = projection * outerView;
 
-            auto angles = cam4D_L2.computeAngles();
+            
             // Ground (tesseract instances)
-            renderer.drawScene(scene2.ground, tesseract.buffers, cam4D_L2, angles, focalLength4D_L2, tesseract, innerMVP);
+            renderer.drawScene(scene2.ground, tesseract.buffers, cam4D_L2, cam4D_L2.getOrientation(), focalLength4D_L2, tesseract, innerMVP);
             // Trees (object4d instances)
-            renderer.drawObjects(scene2.trees, treeObj, treeBuffer, cam4D_L2, angles, focalLength4D_L2, innerMVP);
+            renderer.drawObjects(scene2.trees, treeObj, treeBuffer, cam4D_L2, cam4D_L2.getOrientation(), focalLength4D_L2, innerMVP);
             // Outer cube
             renderer.drawOuterCube(outerMVP);
 

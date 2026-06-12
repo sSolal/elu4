@@ -4,12 +4,12 @@
 #include <vector>
 #include "Object4D.h"
 #include "Scene.h"
-#include "Camera.h"
+#include "Math4D.h"
 #include "physics.h"
 
 struct ObjectInstance {
     glm::vec4 pos;
-    float rotXZ, rotXW, rotZW;
+    Math4D::Rotor4D orientation;
     glm::vec3 colorA, colorB;
 };
 
@@ -24,7 +24,7 @@ bool projectObjectInstance(
     const Object4D& obj,
     const ObjectInstance& inst,
     const glm::vec4& camPos,
-    const Camera4D::Angles& angles,
+    const Math4D::Rotor4D& camOrientation,
     float focalLength,
     std::vector<float>& outVertData
 );

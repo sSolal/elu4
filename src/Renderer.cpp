@@ -51,7 +51,7 @@ void Renderer::drawScene(
     const std::vector<Instance4D>& instances,
     Tesseract::Buffers& tbuf,
     const Camera4D& cam4D,
-    const Camera4D::Angles& angles,
+    const Math4D::Rotor4D& camOrientation,
     float focalLength,
     const Tesseract& tesseract,
     const glm::mat4& innerMVP
@@ -68,7 +68,7 @@ void Renderer::drawScene(
 
     for (const auto& inst : instances) {
         // Project instance; skip if culled
-        if (!projectInstance(inst, cam4D.pos, angles, focalLength, tesseract, instVertData)) {
+        if (!projectInstance(inst, cam4D.pos, camOrientation, focalLength, tesseract, instVertData)) {
             continue;
         }
 
@@ -85,7 +85,7 @@ void Renderer::drawObjects(
     const Object4D& obj,
     ObjectBuffer& buf,
     const Camera4D& cam4D,
-    const Camera4D::Angles& angles,
+    const Math4D::Rotor4D& camOrientation,
     float focalLength,
     const glm::mat4& innerMVP
 ) {
@@ -101,7 +101,7 @@ void Renderer::drawObjects(
 
     for (const auto& inst : instances) {
         // Project instance; skip if culled
-        if (!projectObjectInstance(obj, inst, cam4D.pos, angles, focalLength, objVertData)) {
+        if (!projectObjectInstance(obj, inst, cam4D.pos, camOrientation, focalLength, objVertData)) {
             continue;
         }
 

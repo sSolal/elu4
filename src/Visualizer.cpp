@@ -1,6 +1,5 @@
 #include "Visualizer.h"
 #include "Math4D.h"
-#include <cmath>
 
 Visualizer::Visualizer()
     : shader("shaders/visualizer.vert", "shaders/visualizer.frag") {
@@ -103,65 +102,8 @@ void Visualizer::setupBuffers() {
 }
 
 void Visualizer::applyRotations(std::vector<glm::vec4>& verts) {
-    for (auto& v : verts) {
-        float x = v.x, y = v.y, z = v.z, w = v.w;
-
-        // XY rotation
-        {
-            float c = std::cos(angleXY);
-            float s = std::sin(angleXY);
-            float nx = c * x - s * y;
-            float ny = s * x + c * y;
-            x = nx; y = ny;
-        }
-
-        // XZ rotation
-        {
-            float c = std::cos(angleXZ);
-            float s = std::sin(angleXZ);
-            float nx = c * x - s * z;
-            float nz = s * x + c * z;
-            x = nx; z = nz;
-        }
-
-        // XW rotation
-        {
-            float c = std::cos(angleXW);
-            float s = std::sin(angleXW);
-            float nx = c * x + s * w;
-            float nw = -s * x + c * w;
-            x = nx; w = nw;
-        }
-
-        // YZ rotation
-        {
-            float c = std::cos(angleYZ);
-            float s = std::sin(angleYZ);
-            float ny = c * y - s * z;
-            float nz = s * y + c * z;
-            y = ny; z = nz;
-        }
-
-        // YW rotation
-        {
-            float c = std::cos(angleYW);
-            float s = std::sin(angleYW);
-            float ny = c * y + s * w;
-            float nw = -s * y + c * w;
-            y = ny; w = nw;
-        }
-
-        // ZW rotation
-        {
-            float c = std::cos(angleZW);
-            float s = std::sin(angleZW);
-            float nz = c * z + s * w;
-            float nw = -s * z + c * w;
-            z = nz; w = nw;
-        }
-
-        v = glm::vec4(x, y, z, w);
-    }
+    glm::mat4 M = orientation.toMatrix();
+    for (auto& v : verts) v = M * v;
 }
 
 void Visualizer::drawGizmo(const glm::mat4& MVP) {
@@ -179,25 +121,11 @@ void Visualizer::drawGizmo(const glm::mat4& MVP) {
         glm::vec3(1.0f, 1.0f, 1.0f)   // White for W
     };
 
+    glm::mat4 M = orientation.toMatrix();
+
     for (size_t i = 0; i < axes.size(); i++) {
-        auto axis = axes[i];
-        float x = axis.x, y = axis.y, z = axis.z, w = axis.w;
-
-        // Apply rotations
-        { float c = std::cos(angleXY); float s = std::sin(angleXY);
-          float nx = c * x - s * y; float ny = s * x + c * y; x = nx; y = ny; }
-        { float c = std::cos(angleXZ); float s = std::sin(angleXZ);
-          float nx = c * x - s * z; float nz = s * x + c * z; x = nx; z = nz; }
-        { float c = std::cos(angleXW); float s = std::sin(angleXW);
-          float nx = c * x + s * w; float nw = -s * x + c * w; x = nx; w = nw; }
-        { float c = std::cos(angleYZ); float s = std::sin(angleYZ);
-          float ny = c * y - s * z; float nz = s * y + c * z; y = ny; z = nz; }
-        { float c = std::cos(angleYW); float s = std::sin(angleYW);
-          float ny = c * y + s * w; float nw = -s * y + c * w; y = ny; w = nw; }
-        { float c = std::cos(angleZW); float s = std::sin(angleZW);
-          float nz = c * z + s * w; float nw = -s * z + c * w; z = nz; w = nw; }
-
-        glm::vec3 proj = Math4D::project4Dto3D(x, y, z, w, focalLength);
+        glm::vec4 rotated = M * axes[i];
+        glm::vec3 proj = Math4D::project4Dto3D(rotated.x, rotated.y, rotated.z, rotated.w, focalLength);
 
         // Draw line from origin to axis
         std::vector<float> lineData;

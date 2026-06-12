@@ -16,6 +16,10 @@ bool tabWasPressed = false;
 
 int main(int argc, char* argv[]) {
     // Init GLFW
+    // Force the X11 backend: GLEW queries OpenGL through GLX, which a native
+    // Wayland/EGL context doesn't provide, so glewInit() fails on Wayland
+    // sessions. XWayland supplies GLX, so this works everywhere.
+    glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW" << std::endl;
         return -1;
