@@ -1,0 +1,20 @@
+# Regression for local-frame ("nose follows head") look controls.
+#
+# Forward is -W. Place a point on the ground, ahead and below. Then do the
+# sequence that used to break: look RIGHT (XW), then look UP (YW).
+#
+# With LOCAL-frame rotation (the fix), look-up composes as fromYW * fromXW, so
+# pitch turns about the camera's CURRENT axes. The old WORLD-frame Euler order
+# was fromXW * fromYW, which lands the point at a different camera-space spot
+# (≈ -2.46, -3.73, 0, 0). The exact 'assert at' below pins the local-frame
+# result and so fails if the world-frame order ever creeps back.
+
+point G 0 -2 0 -4
+assert G below
+assert G front
+
+camera rotate xw 90
+camera rotate yw 30
+
+# Local-frame outcome of fromYW(30) * fromXW(90) applied to G:
+assert at G -4 -1.7320508 0 1 1e-4

@@ -55,34 +55,28 @@ void Camera3D::processInput(GLFWwindow* window, float dt) {
 
 Camera4D::Camera4D()
     : pos(0.0f, 2.5f, 0.0f, 0.0f),
-      yawW(0.0f),
-      yawZ(0.0f),
+      yaw(Math4D::Rotor4D::identity()),
       pitch(0.0f),
       speed(1.5f),
       lookSpeed(60.0f) {}
 
-Camera4D::Angles Camera4D::computeAngles() const {
-    float cxwRad = glm::radians(yawW);
-    float czwRad = glm::radians(yawZ);
-    float cywRad = glm::radians(pitch);
-
-    return Angles{
-        cos(cxwRad), sin(cxwRad),
-        cos(czwRad), sin(czwRad),
-        cos(cywRad), sin(cywRad)
-    };
-}
-
 void Camera4D::processInput(GLFWwindow* window, float dt, PhysicsBody& playerBody, PhysicsWorld& physWorld) {
-    // Rotation
+    // Horizontal turning (U/L, J/O): compose into `yaw` within {X,Z,W} only, in
+    // the local frame. These planes never involve Y, so the horizon can't tilt.
+    float a = glm::radians(lookSpeed * dt);  // per-frame turn increment
+
     if (glfwGetKey(window, GLFW_KEY_U) == GLFW_PRESS)
-        yawZ -= lookSpeed * dt;
+        yaw = Math4D::Rotor4D::fromZW(-a) * yaw;
     if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS)
-        yawZ += lookSpeed * dt;
+        yaw = Math4D::Rotor4D::fromZW(a) * yaw;
     if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS)
-        yawW -= lookSpeed * dt;
+        yaw = Math4D::Rotor4D::fromXW(-a) * yaw;
     if (glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS)
-        yawW += lookSpeed * dt;
+        yaw = Math4D::Rotor4D::fromXW(a) * yaw;
+    yaw.normalize();  // keep it a unit rotor across a long session
+
+    // Look up/down (I/K): a single clamped pitch angle, applied OUTSIDE the yaw
+    // in getOrientation(), so world-up stays in the camera Y-W plane (no roll).
     if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS)
         pitch += lookSpeed * dt;
     if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS)
@@ -91,51 +85,27 @@ void Camera4D::processInput(GLFWwindow* window, float dt, PhysicsBody& playerBod
 
     float moveSpeed = speed * dt;
 
-    // Compute 4D camera basis vectors in world space
-    Angles a = computeAngles();
-    float cxw = a.cxw, sxw = a.sxw;
-    float czw = a.czw, szw = a.szw;
-
-    // Camera-relative world directions (inverse of XW→ZW rotation applied to basis vectors)
-    float fwdX = cxw, fwdW = sxw;                           // camera X (forward)
-    float rgtX = -sxw * szw, rgtZ = czw, rgtW = cxw * szw;  // camera Z (strafe)
-    float advX = -sxw * czw, advZ = -szw, advW = cxw * czw; // camera W (advance)
+    // Compute 4D camera basis vectors in world space via inverse (reverse) of camera rotor
+    Math4D::Rotor4D R = getOrientation();
+    Math4D::Rotor4D Rrev = R.reverse();
+    glm::mat4 invM = Rrev.toMatrix();
+    glm::vec4 fwd = invM * glm::vec4(1,0,0,0);  // camera X in world (forward)
+    glm::vec4 rgt = invM * glm::vec4(0,0,1,0);  // camera Z in world (strafe)
+    glm::vec4 adv = invM * glm::vec4(0,0,0,1);  // camera W in world (advance)
 
     glm::vec4 desiredMove(0.0f);
 
     // E/A: forward/back (camera X direction)
-    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
-        desiredMove.x += moveSpeed * fwdX;
-        desiredMove.w += moveSpeed * fwdW;
-    }
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-        desiredMove.x -= moveSpeed * fwdX;
-        desiredMove.w -= moveSpeed * fwdW;
-    }
+    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) desiredMove += moveSpeed * fwd;
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) desiredMove -= moveSpeed * fwd;
 
     // Q/D: strafe left/right (camera Z direction)
-    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
-        desiredMove.x -= moveSpeed * rgtX;
-        desiredMove.z -= moveSpeed * rgtZ;
-        desiredMove.w -= moveSpeed * rgtW;
-    }
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-        desiredMove.x += moveSpeed * rgtX;
-        desiredMove.z += moveSpeed * rgtZ;
-        desiredMove.w += moveSpeed * rgtW;
-    }
+    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) desiredMove -= moveSpeed * rgt;
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) desiredMove += moveSpeed * rgt;
 
     // W/S: advance/retreat (camera W direction)
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-        desiredMove.x += moveSpeed * advX;
-        desiredMove.z += moveSpeed * advZ;
-        desiredMove.w += moveSpeed * advW;
-    }
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-        desiredMove.x -= moveSpeed * advX;
-        desiredMove.z -= moveSpeed * advZ;
-        desiredMove.w -= moveSpeed * advW;
-    }
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) desiredMove += moveSpeed * adv;
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) desiredMove -= moveSpeed * adv;
 
     // Physics step
     playerBody.pos = pos;

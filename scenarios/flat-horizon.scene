@@ -1,0 +1,17 @@
+# Regression: the horizon must never roll.
+#
+# World "up" is +Y. Place U one unit straight above the camera. No matter how we
+# change heading (xw/zw/xz) and then look up/down (yw), U's camera-space X and Z
+# must stay 0 — world-up only ever moves within the camera Y-W (up/depth) plane.
+# If roll ever creeps back in, X or Z goes non-zero and this fails.
+
+point U 0 1 0 0
+
+camera rotate xw 50
+camera rotate zw 35
+camera rotate xz 20
+camera rotate yw 40
+
+# Heading leaves +Y untouched; pitch 40 maps up to (0, cos40, 0, -sin40).
+# X and Z are exactly 0 -> horizon flat.
+assert at U 0 0.76604444 0 -0.64278761 1e-4

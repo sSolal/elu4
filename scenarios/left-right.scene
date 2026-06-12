@@ -1,0 +1,16 @@
+# A point sits on the right and in front of the camera.
+# Spinning the camera 180 degrees in the X-W plane should flip it to the
+# left and behind — an intuitive sanity check on the 4D camera transform.
+
+echo == left-right: point starts RIGHT + IN FRONT ==
+camera pos 0 0 0 0
+point P 1 0 0 -3
+query P
+assert P right
+assert P front
+
+echo == spin camera 180 deg in XW; P should become LEFT + BEHIND ==
+camera rotate xw 180
+query P
+assert P left
+assert P behind

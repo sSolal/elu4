@@ -48,10 +48,22 @@ add_executable(4dg
     src/Object4D.cpp
 )
 
+# Headless scene/query CLI — 4D math only, no OpenGL.
+add_executable(4dscene
+    src/scene_query_main.cpp
+)
+
+# Headless unit tests for the 4D math core (doctest, no OpenGL).
+add_executable(tests
+    tests/test_math4d.cpp
+)
+
 target_include_directories(game PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/imgui ${CMAKE_SOURCE_DIR}/src/imgui/backends)
 target_include_directories(visualizer PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_include_directories(generate_objects PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_include_directories(4dg PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(4dscene PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
 target_link_libraries(game
     OpenGL::OpenGL
@@ -74,3 +86,14 @@ target_link_libraries(generate_objects
 target_link_libraries(4dg
     glm::glm
 )
+
+target_link_libraries(4dscene
+    glm::glm
+)
+
+target_link_libraries(tests
+    glm::glm
+)
+
+enable_testing()
+add_test(NAME math4d COMMAND tests)

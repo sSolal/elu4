@@ -105,28 +105,24 @@ int main(int argc, char* argv[]) {
             std::string plane = argv[3];
             float angle = deg2rad(std::stof(argv[4]));
 
-            float c = std::cos(angle);
-            float s = std::sin(angle);
+            // Build a rotor for the requested plane (single verified rotation
+            // path, shared with the game/visualizer) and bake it into vertices.
+            Math4D::Rotor4D rotor;
+            if (plane == "xy")      rotor = Math4D::Rotor4D::fromXY(angle);
+            else if (plane == "xz") rotor = Math4D::Rotor4D::fromXZ(angle);
+            else if (plane == "xw") rotor = Math4D::Rotor4D::fromXW(angle);
+            else if (plane == "yz") rotor = Math4D::Rotor4D::fromYZ(angle);
+            else if (plane == "yw") rotor = Math4D::Rotor4D::fromYW(angle);
+            else if (plane == "zw") rotor = Math4D::Rotor4D::fromZW(angle);
+            else {
+                std::cerr << "Unknown plane: " << plane << "\n";
+                return 1;
+            }
 
+            glm::mat4 M = rotor.toMatrix();
             Object4D obj(file);
-
             for (auto& v : obj.vertices) {
-                if (plane == "xy") {
-                    Math4D::rotXY(v.x, v.y, c, s);
-                } else if (plane == "xz") {
-                    Math4D::rotXZ(v.x, v.z, c, s);
-                } else if (plane == "xw") {
-                    Math4D::rotXW(v.x, v.w, c, s);
-                } else if (plane == "yz") {
-                    Math4D::rotYZ(v.y, v.z, c, s);
-                } else if (plane == "yw") {
-                    Math4D::rotYW(v.y, v.w, c, s);
-                } else if (plane == "zw") {
-                    Math4D::rotZW(v.z, v.w, c, s);
-                } else {
-                    std::cerr << "Unknown plane: " << plane << "\n";
-                    return 1;
-                }
+                v = M * v;
             }
 
             obj.saveToJSON(file);

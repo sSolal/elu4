@@ -5,6 +5,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "physics.h"
+#include "Math4D.h"
 
 class Camera3D {
 public:
@@ -23,18 +24,22 @@ public:
 
 class Camera4D {
 public:
-    struct Angles {
-        float cxw, sxw, czw, szw, cyw, syw;
-    };
-
     glm::vec4 pos;
-    float yawW;    // XW plane rotation (J/O keys)
-    float yawZ;    // ZW plane rotation (U/L keys)
-    float pitch;   // YW plane rotation (I/K keys)
+    // Flat-horizon FPS orientation, split so the world "up" (+Y) can never roll:
+    //   * yaw   — heading within the horizontal space {X,Z,W}; never touches Y
+    //             (its bivectors stay in {XW,ZW,XZ}, which is closed under the
+    //              geometric product, so no Y component is ever introduced)
+    //   * pitch — look up/down in the Y-W plane, applied OUTSIDE the yaw
+    // getOrientation() = fromYW(pitch) * yaw therefore maps world-up Y into the
+    // camera Y-W plane only (zero X/Z leak), so the horizon stays level always.
+    Math4D::Rotor4D yaw;
+    float pitch;      // degrees, look up/down, clamped to +/-89
     float speed;
-    float lookSpeed;
+    float lookSpeed;  // degrees per second
 
     Camera4D();
-    Angles computeAngles() const;
+    Math4D::Rotor4D getOrientation() const {
+        return Math4D::Rotor4D::fromYW(glm::radians(pitch)) * yaw;
+    }
     void processInput(GLFWwindow* window, float dt, PhysicsBody& playerBody, PhysicsWorld& physWorld);
 };

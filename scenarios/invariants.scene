@@ -1,0 +1,19 @@
+# Invariant: the 4D distance between two points must not change, no matter
+# how the camera moves or spins. Also checks above/below/front classification.
+
+echo == distance A-B is 4, and stays 4 under arbitrary camera spins ==
+point A 0 2 0 -2
+point B 0 -2 0 -2
+assert dist A B 4
+
+camera rotate xw 37
+camera rotate zw 88
+camera rotate yw 20
+assert dist A B 4
+
+echo == from the default camera, A is above + front, B is below + front ==
+camera reset
+assert A above
+assert A front
+assert B below
+assert B front

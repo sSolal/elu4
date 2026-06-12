@@ -5,6 +5,7 @@
 #include <vector>
 #include "Object4D.h"
 #include "Shader.h"
+#include "Math4D.h"
 
 class Visualizer {
 public:
@@ -15,13 +16,15 @@ public:
     void setupBuffers();
     void draw(const glm::mat4& MVP);
 
-    // Rotation controls
-    void rotateXY(float angle) { angleXY += angle; }
-    void rotateXZ(float angle) { angleXZ += angle; }
-    void rotateXW(float angle) { angleXW += angle; }
-    void rotateYZ(float angle) { angleYZ += angle; }
-    void rotateYW(float angle) { angleYW += angle; }
-    void rotateZW(float angle) { angleZW += angle; }
+    // Rotation controls: compose new plane rotation onto current orientation.
+    // Re-normalize after each compose so float drift can't accumulate over a
+    // long session of rotating in many directions.
+    void rotateXY(float angle) { orientation = Math4D::Rotor4D::fromXY(angle) * orientation; orientation.normalize(); }
+    void rotateXZ(float angle) { orientation = Math4D::Rotor4D::fromXZ(angle) * orientation; orientation.normalize(); }
+    void rotateXW(float angle) { orientation = Math4D::Rotor4D::fromXW(angle) * orientation; orientation.normalize(); }
+    void rotateYZ(float angle) { orientation = Math4D::Rotor4D::fromYZ(angle) * orientation; orientation.normalize(); }
+    void rotateYW(float angle) { orientation = Math4D::Rotor4D::fromYW(angle) * orientation; orientation.normalize(); }
+    void rotateZW(float angle) { orientation = Math4D::Rotor4D::fromZW(angle) * orientation; orientation.normalize(); }
 
     void setFocalLength(float f) { focalLength = glm::clamp(f, 0.1f, 10.0f); }
     void setWireframeMode(bool mode) { wireframeMode = mode; }
@@ -36,9 +39,8 @@ private:
     Object4D object;
     bool objectLoaded = false;
 
-    // Rotation angles in each plane
-    float angleXY = 0.0f, angleXZ = 0.0f, angleXW = 0.0f;
-    float angleYZ = 0.0f, angleYW = 0.0f, angleZW = 0.0f;
+    // Current orientation as a rotor
+    Math4D::Rotor4D orientation = Math4D::Rotor4D::identity();
     float focalLength = 2.0f;
 
     // GPU buffers
