@@ -18,8 +18,61 @@ glm::vec3 Camera3D::getFront() const {
     return glm::normalize(front);
 }
 
+namespace {
+    // ---- Camera-sway tunables ----
+    const glm::vec3 BOX_CENTER(0.0f);   // the 3D scene cube is centred at the origin
+    const float SWAY_AMP         = 0.10f;  // angular swing amplitude (radians, ~6°)
+    const float SWAY_PERIOD      = 6.0f;   // seconds per cycle (sine modes)
+    const float SWAY_NOISE_SPEED = 0.15f;  // time scale for the random mode
+
+    // Smooth 1-D value noise in [0,1] for the random camera-sway mode.
+    float camHash(int n) {
+        unsigned int x = (unsigned int)n * 374761393u + 1u;
+        x = (x ^ (x >> 13)) * 1274126177u;
+        return float((x ^ (x >> 16)) & 0xFFFFFFu) / float(0x1000000);
+    }
+    float camNoise(float t) {
+        float fi = std::floor(t);
+        int i = (int)fi;
+        float f = t - fi;
+        float a = camHash(i), b = camHash(i + 1);
+        float u = f * f * (3.0f - 2.0f * f);
+        return a + (b - a) * u;
+    }
+}
+
 glm::mat4 Camera3D::getViewMatrix() const {
-    return glm::lookAt(pos, pos + getFront(), up);
+    glm::mat4 base = glm::lookAt(pos, pos + getFront(), up);
+    if (oscMode == 0)
+        return base;
+
+    // Sway: rigidly rotate the WHOLE camera (position and orientation together)
+    // about the box centre. The camera is not forced to look at the centre — it
+    // keeps whatever it was aimed at, just swung around the centre in 3D — so the
+    // scene rotates about the cube's middle rather than spinning in place.
+    glm::vec3 rel = pos - BOX_CENTER;
+    glm::vec3 axisUp = up;                                         // azimuth axis
+    glm::vec3 axisRight = glm::normalize(glm::cross(axisUp, rel)); // elevation axis
+
+    float w = 6.2831853f * oscTime / SWAY_PERIOD;
+    float az = 0.0f, el = 0.0f;
+    if (oscMode == 1) {                       // horizontal only
+        az = SWAY_AMP * std::sin(w);
+    } else if (oscMode == 2) {                // circle
+        az = SWAY_AMP * std::sin(w);
+        el = SWAY_AMP * std::cos(w);
+    } else {                                  // random, centred on average
+        az = SWAY_AMP * (2.0f * camNoise(oscTime * SWAY_NOISE_SPEED)         - 1.0f);
+        el = SWAY_AMP * (2.0f * camNoise(oscTime * SWAY_NOISE_SPEED + 50.0f) - 1.0f);
+    }
+
+    // World-space rotation about the centre, applied rigidly to the camera pose:
+    //   V_new = V_base * (T(C) · R · T(-C))^-1
+    glm::mat4 R = glm::rotate(glm::mat4(1.0f), az, axisUp) *
+                  glm::rotate(glm::mat4(1.0f), el, axisRight);
+    glm::mat4 aboutCenter = glm::translate(glm::mat4(1.0f), BOX_CENTER) * R *
+                            glm::translate(glm::mat4(1.0f), -BOX_CENTER);
+    return base * glm::inverse(aboutCenter);
 }
 
 void Camera3D::processInput(GLFWwindow* window, float dt) {

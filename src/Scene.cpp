@@ -88,7 +88,7 @@ bool projectInstance(
 
     // Project all vertices
     outVertData.clear();
-    outVertData.reserve(16 * 6);
+    outVertData.reserve(16 * 7);
 
     for (int i = 0; i < 16; i++) {
         glm::vec4 localV = tesseract.verts4D[i];
@@ -109,6 +109,7 @@ bool projectInstance(
         outVertData.push_back(c.r);
         outVertData.push_back(c.g);
         outVertData.push_back(c.b);
+        outVertData.push_back(-v.w);  // camera-relative 4D depth (in front => positive)
     }
 
     return true;

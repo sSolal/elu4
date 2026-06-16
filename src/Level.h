@@ -7,6 +7,7 @@
 #include "Camera.h"
 #include "physics.h"
 #include "LevelControls.h"
+#include "RenderSettings.h"
 
 class Renderer;   // fwd — defined in Renderer.h
 class Tesseract;  // fwd — defined in Tesseract.h
@@ -24,6 +25,7 @@ struct LevelContext {
     glm::mat4   projection;
     glm::mat4   outerMVP;
     glm::mat4   innerMVP;
+    RenderSettings& vis;     // global visualization toggles, owned by runner
 };
 
 // Abstract base for every level. Concrete levels add only their scene data and

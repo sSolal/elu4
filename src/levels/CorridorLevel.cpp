@@ -52,10 +52,12 @@ void CorridorLevel::load() {
     tileBuf_.init(tileMesh_);
 
     // Two-tone palettes; alternation along the corridor makes each cube distinct.
-    // The floor is warm/dark so the ground is unmistakable.
-    const glm::vec3 floorShade[2] = {{0.36f, 0.29f, 0.22f}, {0.27f, 0.21f, 0.16f}};
-    const glm::vec3 ceilShade [2] = {{0.55f, 0.57f, 0.63f}, {0.46f, 0.48f, 0.54f}};
-    const glm::vec3 wallShade [2] = {{0.44f, 0.46f, 0.52f}, {0.34f, 0.36f, 0.42f}};
+    // Saturated, distinctly-hued surfaces (warm floor / cool ceiling / teal walls)
+    // so the depth fog — which desaturates with distance — produces a clear
+    // near-vivid → far-grey gradient along (and within) each cube.
+    const glm::vec3 floorShade[2] = {{0.62f, 0.34f, 0.13f}, {0.48f, 0.24f, 0.08f}};  // warm orange-brown
+    const glm::vec3 ceilShade [2] = {{0.28f, 0.47f, 0.78f}, {0.20f, 0.36f, 0.64f}};  // cool blue
+    const glm::vec3 wallShade [2] = {{0.24f, 0.56f, 0.48f}, {0.16f, 0.43f, 0.36f}};  // teal
     const Math4D::Rotor4D I = Math4D::Rotor4D::identity();
 
     // Parity (and therefore colour) increases from the rear-most cube forward, so
@@ -110,10 +112,10 @@ void CorridorLevel::update(const LevelContext& ctx) {
 
 void CorridorLevel::render(const LevelContext& ctx) {
     Math4D::Rotor4D ori = cam4D_.getOrientation();
-    ctx.renderer.drawObjects(floorInsts_, tileMesh_, tileBuf_, cam4D_, ori, focal_, ctx.innerMVP);
+    ctx.renderer.drawObjects(floorInsts_, tileMesh_, tileBuf_, cam4D_, ori, focal_, ctx.innerMVP, ctx.vis);
     if (showWalls_)
-        ctx.renderer.drawObjects(wallInsts_, tileMesh_, tileBuf_, cam4D_, ori, focal_, ctx.innerMVP);
-    ctx.renderer.drawScene(goal_, ctx.tesseract.buffers, cam4D_, ori, focal_, ctx.tesseract, ctx.innerMVP);
+        ctx.renderer.drawObjects(wallInsts_, tileMesh_, tileBuf_, cam4D_, ori, focal_, ctx.innerMVP, ctx.vis);
+    ctx.renderer.drawScene(goal_, ctx.tesseract.buffers, cam4D_, ori, focal_, ctx.tesseract, ctx.innerMVP, ctx.vis);
     ctx.renderer.drawOuterCube(ctx.outerMVP);
 }
 

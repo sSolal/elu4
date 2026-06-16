@@ -21,7 +21,7 @@ void StubLevel::update(const LevelContext& ctx) {
 
 void StubLevel::render(const LevelContext& ctx) {
     ctx.renderer.drawScene(scene_, ctx.tesseract.buffers, cam4D_, cam4D_.getOrientation(),
-                           focal_, ctx.tesseract, ctx.innerMVP);
+                           focal_, ctx.tesseract, ctx.innerMVP, ctx.vis);
     ctx.renderer.drawOuterCube(ctx.outerMVP);
 }
 

@@ -10,6 +10,7 @@
 #include "Camera.h"
 #include "ObjectBuffer.h"
 #include "Level2.h"
+#include "RenderSettings.h"
 
 class Renderer {
 public:
@@ -23,7 +24,8 @@ public:
         const Math4D::Rotor4D& camOrientation,
         float focalLength,
         const Tesseract& tesseract,
-        const glm::mat4& innerMVP
+        const glm::mat4& innerMVP,
+        const RenderSettings& vis
     );
 
     void drawObjects(
@@ -33,12 +35,16 @@ public:
         const Camera4D& cam4D,
         const Math4D::Rotor4D& camOrientation,
         float focalLength,
-        const glm::mat4& innerMVP
+        const glm::mat4& innerMVP,
+        const RenderSettings& vis
     );
 
     void drawOuterCube(const glm::mat4& outerMVP);
 
 private:
+    // Set the shared inner-shader uniforms (MVP + all depth/alpha/pulse modes).
+    void setupInnerShader(const glm::mat4& innerMVP, const RenderSettings& vis);
+
     Shader innerShader, wireShader;
     GLuint wireEdgeVAO, wireEdgeVBO, wireEdgeEBO;
 };

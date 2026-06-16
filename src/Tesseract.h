@@ -16,12 +16,14 @@ public:
 
     // GPU buffers for rendering faces
     struct Buffers {
-        GLuint vao, vbo, ebo;
-        size_t indexCount;
+        GLuint vao, vbo, ebo, edgeEbo;
+        size_t indexCount, edgeIndexCount;
 
-        void init(const std::vector<unsigned int>& indices);
+        void init(const std::vector<unsigned int>& indices,
+                  const std::vector<unsigned int>& edgeIndices);
         void uploadVerts(const std::vector<float>& vertData);
-        void draw();
+        void draw();        // solid faces (GL_TRIANGLES)
+        void drawEdges();   // wireframe edges (GL_LINES)
         void destroy();
     };
 

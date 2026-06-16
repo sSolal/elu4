@@ -1,15 +1,18 @@
 #version 330 core
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aColor;
+layout (location = 2) in float aDepth;   // camera-relative 4D depth (-v.w)
 
 uniform mat4 MVP;
 uniform mat4 innerView;
 
 out vec3 fragColor;
+out float vDepth;
 
 void main() {
     gl_Position = MVP * vec4(aPos, 1.0);
     fragColor = aColor;
+    vDepth = aDepth;
 
     // Compute position in cube-local space (for clipping to [-0.5, 0.5])
     vec4 worldPos = innerView * vec4(aPos, 1.0);

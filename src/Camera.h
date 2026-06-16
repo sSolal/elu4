@@ -17,6 +17,12 @@ public:
     float speed;
     float lookSpeed;
 
+    // Observer-camera oscillation (key M), set by the runner each frame from
+    // RenderSettings. The look target stays fixed while the eye sways, producing
+    // motion parallax — a strong kinetic depth cue. 0=static, 1=circular, 2=forward.
+    int   oscMode = 0;
+    float oscTime = 0.0f;
+
     Camera3D();
     glm::vec3 getFront() const;
     glm::mat4 getViewMatrix() const;

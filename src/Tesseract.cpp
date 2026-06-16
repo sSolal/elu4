@@ -1,24 +1,32 @@
 #include "Tesseract.h"
 
-void Tesseract::Buffers::init(const std::vector<unsigned int>& indices) {
+void Tesseract::Buffers::init(const std::vector<unsigned int>& indices,
+                              const std::vector<unsigned int>& edgeIndices) {
     indexCount = indices.size();
+    edgeIndexCount = edgeIndices.size();
 
     glGenVertexArrays(1, &vao);
     glGenBuffers(1, &vbo);
     glGenBuffers(1, &ebo);
+    glGenBuffers(1, &edgeEbo);
 
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    // 16 vertices × 6 floats (pos + color), dynamic
-    glBufferData(GL_ARRAY_BUFFER, 16 * 6 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+    // 16 vertices × 7 floats (pos + color + depth), dynamic
+    glBufferData(GL_ARRAY_BUFFER, 16 * 7 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
 
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(6 * sizeof(float)));
+    glEnableVertexAttribArray(2);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, edgeEbo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, edgeIndices.size() * sizeof(unsigned int), edgeIndices.data(), GL_STATIC_DRAW);
 
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -33,14 +41,23 @@ void Tesseract::Buffers::uploadVerts(const std::vector<float>& vertData) {
 
 void Tesseract::Buffers::draw() {
     glBindVertexArray(vao);
+    // drawEdges() may have changed the VAO's element binding; restore it.
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
     glDrawElements(GL_TRIANGLES, (GLsizei)indexCount, GL_UNSIGNED_INT, 0);
+}
+
+void Tesseract::Buffers::drawEdges() {
+    glBindVertexArray(vao);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, edgeEbo);
+    glDrawElements(GL_LINES, (GLsizei)edgeIndexCount, GL_UNSIGNED_INT, 0);
 }
 
 void Tesseract::Buffers::destroy() {
     if (vao) glDeleteVertexArrays(1, &vao);
     if (vbo) glDeleteBuffers(1, &vbo);
     if (ebo) glDeleteBuffers(1, &ebo);
-    vao = vbo = ebo = 0;
+    if (edgeEbo) glDeleteBuffers(1, &edgeEbo);
+    vao = vbo = ebo = edgeEbo = 0;
 }
 
 Tesseract::Tesseract() {
@@ -105,5 +122,13 @@ void Tesseract::buildTopology() {
         }
     }
 
-    buffers.init(faceIndices);
+    // Flatten the edge pairs into a GL_LINES index list for wireframe rendering.
+    std::vector<unsigned int> edgeIndices;
+    edgeIndices.reserve(edges.size() * 2);
+    for (const auto& e : edges) {
+        edgeIndices.push_back((unsigned)e.first);
+        edgeIndices.push_back((unsigned)e.second);
+    }
+
+    buffers.init(faceIndices, edgeIndices);
 }

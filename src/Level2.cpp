@@ -81,7 +81,7 @@ bool projectObjectInstance(
 
     // Project all vertices
     outVertData.clear();
-    outVertData.reserve(obj.vertices.size() * 6);
+    outVertData.reserve(obj.vertices.size() * 7);
 
     for (const auto& v : obj.vertices) {
         glm::vec4 rv = objM * v;
@@ -101,6 +101,7 @@ bool projectObjectInstance(
         outVertData.push_back(c.r);
         outVertData.push_back(c.g);
         outVertData.push_back(c.b);
+        outVertData.push_back(-rv.w);  // camera-relative 4D depth (in front => positive)
     }
 
     return true;
