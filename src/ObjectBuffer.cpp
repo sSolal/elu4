@@ -17,6 +17,7 @@ void ObjectBuffer::init(const Object4D& obj) {
     glGenBuffers(1, &vbo);
     glGenBuffers(1, &ebo);
     glGenBuffers(1, &edgeEbo);
+    glGenBuffers(1, &sortedEbo);
 
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
@@ -47,6 +48,13 @@ void ObjectBuffer::init(const Object4D& obj) {
                  edgeIdx.data(),
                  GL_STATIC_DRAW);
 
+    // Per-frame depth-sorted triangle indices: same capacity, refilled each draw.
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sortedEbo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+                 obj.triangleIndices.size() * sizeof(unsigned int),
+                 nullptr,
+                 GL_DYNAMIC_DRAW);
+
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
@@ -65,6 +73,15 @@ void ObjectBuffer::draw() {
     glDrawElements(GL_TRIANGLES, (GLsizei)indexCount, GL_UNSIGNED_INT, 0);
 }
 
+void ObjectBuffer::drawSorted(const std::vector<unsigned int>& sortedIndices) {
+    glBindVertexArray(vao);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sortedEbo);
+    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0,
+                    (GLsizeiptr)(sortedIndices.size() * sizeof(unsigned int)),
+                    sortedIndices.data());
+    glDrawElements(GL_TRIANGLES, (GLsizei)sortedIndices.size(), GL_UNSIGNED_INT, 0);
+}
+
 void ObjectBuffer::drawEdges() {
     glBindVertexArray(vao);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, edgeEbo);
@@ -76,5 +93,6 @@ void ObjectBuffer::destroy() {
     if (vbo) glDeleteBuffers(1, &vbo);
     if (ebo) glDeleteBuffers(1, &ebo);
     if (edgeEbo) glDeleteBuffers(1, &edgeEbo);
-    vao = vbo = ebo = edgeEbo = 0;
+    if (sortedEbo) glDeleteBuffers(1, &sortedEbo);
+    vao = vbo = ebo = edgeEbo = sortedEbo = 0;
 }

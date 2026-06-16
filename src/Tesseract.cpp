@@ -9,6 +9,7 @@ void Tesseract::Buffers::init(const std::vector<unsigned int>& indices,
     glGenBuffers(1, &vbo);
     glGenBuffers(1, &ebo);
     glGenBuffers(1, &edgeEbo);
+    glGenBuffers(1, &sortedEbo);
 
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
@@ -28,6 +29,10 @@ void Tesseract::Buffers::init(const std::vector<unsigned int>& indices,
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, edgeEbo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, edgeIndices.size() * sizeof(unsigned int), edgeIndices.data(), GL_STATIC_DRAW);
 
+    // Per-frame depth-sorted face indices: same size as the static list, refilled each draw.
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sortedEbo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), nullptr, GL_DYNAMIC_DRAW);
+
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
@@ -46,6 +51,15 @@ void Tesseract::Buffers::draw() {
     glDrawElements(GL_TRIANGLES, (GLsizei)indexCount, GL_UNSIGNED_INT, 0);
 }
 
+void Tesseract::Buffers::drawSorted(const std::vector<unsigned int>& sortedIndices) {
+    glBindVertexArray(vao);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sortedEbo);
+    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0,
+                    (GLsizeiptr)(sortedIndices.size() * sizeof(unsigned int)),
+                    sortedIndices.data());
+    glDrawElements(GL_TRIANGLES, (GLsizei)sortedIndices.size(), GL_UNSIGNED_INT, 0);
+}
+
 void Tesseract::Buffers::drawEdges() {
     glBindVertexArray(vao);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, edgeEbo);
@@ -57,7 +71,8 @@ void Tesseract::Buffers::destroy() {
     if (vbo) glDeleteBuffers(1, &vbo);
     if (ebo) glDeleteBuffers(1, &ebo);
     if (edgeEbo) glDeleteBuffers(1, &edgeEbo);
-    vao = vbo = ebo = edgeEbo = 0;
+    if (sortedEbo) glDeleteBuffers(1, &sortedEbo);
+    vao = vbo = ebo = edgeEbo = sortedEbo = 0;
 }
 
 Tesseract::Tesseract() {

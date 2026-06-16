@@ -32,10 +32,15 @@ void main() {
     vec3 col = clamp(mix(vec3(l0), fragColor, uVibrance), 0.0, 1.0);
 
     // --- Colour cue (N) ---
+    // Fog factor: how much this fragment is swallowed by distance haze. Capped at
+    // 0.9 so even the most distant surface keeps ~10% of its original colour and
+    // opacity — it asymptotes to "barely visible", never fully invisible.
+    // Only the Fog cue produces haze; the other cues leave alpha untouched.
+    float fog = (uDepthCue == 0) ? clamp(nd * uFogStrength, 0.0, 1.0) * 0.9 : 0.0;
     if (uDepthCue == 0) {
         // Distance fog: far objects fade into the sky colour, so they read as
         // receding into the background.
-        col = mix(col, uFogColor, clamp(nd * uFogStrength, 0.0, 1.0));
+        col = mix(col, uFogColor, fog);
     } else if (uDepthCue == 2) {
         // DarkenFar: far objects fade toward black.
         col *= (1.0 - 0.7 * nd);
@@ -44,8 +49,9 @@ void main() {
     if (uLineMode) {
         // Edges share the surface colour, nudged darker/lighter to stand out;
         // their opacity follows the object so a pulsing object fades entirely.
+        // Fog also thins them out so far outlines dissolve into the haze.
         col = mix(col, uBorderTarget, uBorderAmt);
-        FragColor = vec4(col, clamp(uInstAlpha, 0.0, 1.0));
+        FragColor = vec4(col, clamp(uInstAlpha * (1.0 - fog), 0.0, 1.0));
         return;
     }
 
@@ -56,6 +62,7 @@ void main() {
     else if (uAlphaMode == 3) a = mix(0.15, 0.9, nd);   // near = more transparent
     else                      a = 0.35;                 // Mid (default)
 
-    a *= uInstAlpha;   // X-ray pulse
+    a *= uInstAlpha;        // X-ray pulse
+    a *= (1.0 - fog);       // distance haze: far surfaces thin out, not just recolour
     FragColor = vec4(col, clamp(a, 0.0, 1.0));
 }
