@@ -30,9 +30,18 @@ strafe). Forward/back along W still works but is useless for dodging. **Head-ret
 - **Lose/retry flow**: currently only `checkWin()` exists; add a soft reset (re-`load()` or
   reposition player + clear projectiles).
 
-## Open questions
-- Balls along **W** (depth) would read as growing dots — confusing. Prefer balls along
-  **X or Z** so they approach in a legible way, and the "extra" escape direction is the
-  other horizontal axis. Confirm which axis balls travel along.
-- Difficulty curve: ball speed/frequency ramp.
-- Telegraph style (shadow on floor? colour flash at the spawn end?).
+## Resolved approach (as built)
+- **Balls travel along W**, straight at the player. The head-return spring keeps the
+  player looking down −W, so W is the *only* direction they can perceive motion from;
+  balls along X/Z would be unseeable. They read as growing dots — which is the intended
+  telegraph — and you dodge by **strafing in X/Z** out of the incoming lane.
+- **Aim:** each ball's X/Z offset is a Gaussian centred on the player's current position,
+  so balls come roughly at you. σ tightens over the run (3.0 → 1.5) to raise difficulty.
+- **Difficulty ramp** over the 45 s round: spawn interval 1.2 s → 0.45 s, speed 6 → 12 u/s.
+- **Win:** survive 45 s. **Hit:** soft reset (clear balls, restart timer), keep playing.
+- The floor is a checkerboard of cube blocks tiling the (X,Z,W) ground volume, giving an
+  X/Z position reference and a depth gradient along W.
+
+## Possible follow-ups
+- Floor "shadow" telegraph directly under each far ball (deferred — growing dot suffices).
+- Multiple simultaneous lanes per wave at high difficulty.

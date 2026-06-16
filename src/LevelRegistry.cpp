@@ -1,6 +1,7 @@
 #include "LevelRegistry.h"
 
 #include "levels/CorridorLevel.h"
+#include "levels/DodgeballLevel.h"
 #include "levels/StubLevel.h"
 
 const std::vector<LevelEntry>& levelRegistry() {
@@ -13,13 +14,15 @@ const std::vector<LevelEntry>& levelRegistry() {
         r.push_back({"1 - Corridor", true,
             [] { return std::unique_ptr<Level>(new CorridorLevel()); }});
 
+        r.push_back({"2 - Dodgeball", true,
+            [] { return std::unique_ptr<Level>(new DodgeballLevel()); }});
+
         auto stub = [&r](const char* name, const char* blurb) {
             std::string n = name, b = blurb;
             r.push_back({n, false,
                 [n, b] { return std::unique_ptr<Level>(new StubLevel(n, b)); }});
         };
 
-        stub("2 - Dodgeball",        "Strafe the four horizontal directions to dodge incoming balls.");
         stub("3 - Turn & Face",      "Keep turning - your heading rotates the depth axis into your strafe plane.");
         stub("4 - Third Person",     "Steer a 4D avatar with an orbiting camera; run, strafe, turn, jump.");
         stub("5 - Leap",             "Platforming: time your jumps from platform to platform.");

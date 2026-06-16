@@ -15,7 +15,7 @@ Axes as the player experiences them:
 | # | Level | Camera | Teaches | Status |
 |---|-------|--------|---------|--------|
 | 1 | Corridor | FP | W-translation = zoom | **Built** |
-| 2 | Dodgeball | FP | ±X/±Z strafe (four directions) | Design |
+| 2 | Dodgeball | FP | ±X/±Z strafe (four directions) | **Built** |
 | 3 | Turn & Face | FP | Retained yaw rotates depth into strafe | Design |
 | 4 | Third Person | Orbit | Controlling a 4D avatar | Design |
 | 5 | Leap | Orbit | Y-axis platforming / jump | Design |
