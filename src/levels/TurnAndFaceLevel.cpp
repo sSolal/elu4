@@ -3,6 +3,7 @@
 #include "Renderer.h"
 #include "Tesseract.h"
 #include "primitives.h"
+#include "HudWidgets.h"
 #include "imgui.h"
 #include <algorithm>
 #include <cmath>
@@ -240,38 +241,7 @@ void TurnAndFaceLevel::renderHUD(const LevelContext& ctx) {
     // the current forward direction onto each global axis. Forward is a unit
     // vector, so the four squared bar lengths always sum to 1. At the start you
     // look down -W, so W reads full; turning bleeds that weight onto X/Y/Z.
+    // (Shared widget, see HudWidgets.h.)
     glm::vec4 fw = glm::inverse(cam4D_.getOrientation().toMatrix()) * glm::vec4(0, 0, 0, -1);
-    const float vals[4] = { fw.x, fw.y, fw.z, fw.w };
-    const char* labels[4] = { "X", "Y", "Z", "W" };
-    const ImU32 colors[4] = {                  // pastel: X red, Y green, Z orange, W blue
-        IM_COL32(237, 128, 128, 255),
-        IM_COL32(140, 209, 140, 255),
-        IM_COL32(242, 184, 107, 255),
-        IM_COL32(128, 158, 237, 255),
-    };
-    const ImVec2 wsize(210.0f, 150.0f);
-    ImGui::SetNextWindowPos(ImVec2(disp.x - wsize.x - 10.0f, disp.y - wsize.y - 10.0f), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(wsize, ImGuiCond_Always);
-    ImGui::Begin("Orientation", nullptr,
-                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar);
-    ImVec2 wp = ImGui::GetWindowPos();
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    dl->AddText(ImVec2(wp.x + 12.0f, wp.y + 8.0f), IM_COL32(225, 225, 230, 255), "Facing");
-    const float pad = 12.0f, labelW = 20.0f, rowH = 28.0f, trackH = 12.0f;
-    const float x0 = wp.x + pad + labelW, x1 = wp.x + wsize.x - pad, cx = (x0 + x1) * 0.5f;
-    const float top = wp.y + 32.0f;
-    for (int i = 0; i < 4; ++i) {
-        float cy = top + i * rowH + rowH * 0.5f;
-        dl->AddText(ImVec2(wp.x + pad, cy - 7.0f), IM_COL32(205, 205, 210, 255), labels[i]);
-        dl->AddRectFilled(ImVec2(x0, cy - trackH * 0.5f), ImVec2(x1, cy + trackH * 0.5f),
-                          IM_COL32(38, 40, 48, 200), 3.0f);
-        dl->AddLine(ImVec2(cx, cy - trackH * 0.5f - 1.0f), ImVec2(cx, cy + trackH * 0.5f + 1.0f),
-                    IM_COL32(120, 120, 132, 220));
-        float v = glm::clamp(vals[i], -1.0f, 1.0f);
-        float ex = cx + v * (x1 - x0) * 0.5f;
-        dl->AddRectFilled(ImVec2(std::min(cx, ex), cy - trackH * 0.5f),
-                          ImVec2(std::max(cx, ex), cy + trackH * 0.5f), colors[i], 3.0f);
-    }
-    ImGui::End();
+    hud::drawFacingWidget(fw);
 }
