@@ -2,6 +2,7 @@
 
 #include "levels/CorridorLevel.h"
 #include "levels/DodgeballLevel.h"
+#include "levels/TurnAndFaceLevel.h"
 #include "levels/StubLevel.h"
 
 const std::vector<LevelEntry>& levelRegistry() {
@@ -23,7 +24,9 @@ const std::vector<LevelEntry>& levelRegistry() {
                 [n, b] { return std::unique_ptr<Level>(new StubLevel(n, b)); }});
         };
 
-        stub("3 - Turn & Face",      "Keep turning - your heading rotates the depth axis into your strafe plane.");
+        r.push_back({"3 - Turn & Face", true,
+            [] { return std::unique_ptr<Level>(new TurnAndFaceLevel()); }});
+
         stub("4 - Third Person",     "Steer a 4D avatar with an orbiting camera; run, strafe, turn, jump.");
         stub("5 - Leap",             "Platforming: time your jumps from platform to platform.");
         stub("6 - Plane (3D-like)",  "Fly through hoops; level flight is just like a 3D plane.");
