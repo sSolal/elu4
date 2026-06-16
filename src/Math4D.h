@@ -104,6 +104,35 @@ struct Rotor4D {
         return {s, -b12,-b13,-b14,-b23,-b24,-b34, p};
     }
 
+    // Componentwise addition (treats the rotor as an 8-vector)
+    Rotor4D operator+(const Rotor4D& r) const {
+        return {s+r.s, b12+r.b12, b13+r.b13, b14+r.b14,
+                b23+r.b23, b24+r.b24, b34+r.b34, p+r.p};
+    }
+
+    // Componentwise scalar scale
+    Rotor4D operator*(float k) const {
+        return {s*k, b12*k, b13*k, b14*k, b23*k, b24*k, b34*k, p*k};
+    }
+
+    // Euclidean inner product of the two rotors as 8-vectors
+    static float dot(const Rotor4D& a, const Rotor4D& b) {
+        return a.s*b.s + a.b12*b.b12 + a.b13*b.b13 + a.b14*b.b14
+             + a.b23*b.b23 + a.b24*b.b24 + a.b34*b.b34 + a.p*b.p;
+    }
+
+    // Normalized linear interpolation between two unit rotors.
+    // Handles the double cover: rotors q and -q encode the same rotation, so if
+    // a and b point "opposite ways" we flip b first, otherwise the lerp takes the
+    // long way around (a full extra turn). Cheap and stable for the small
+    // per-frame corrections used by head-return; not a true geodesic slerp.
+    static Rotor4D nlerp(const Rotor4D& a, Rotor4D b, float t) {
+        if (dot(a, b) < 0.0f) b = b * -1.0f;  // shortest-path sign fix
+        Rotor4D out = a * (1.0f - t) + b * t;
+        out.normalize();
+        return out;
+    }
+
     // Normalize to unit rotor (Euclidean norm)
     void normalize() {
         float n = std::sqrt(s*s + b12*b12 + b13*b13 + b14*b14 + b23*b23 + b24*b24 + b34*b34 + p*p);

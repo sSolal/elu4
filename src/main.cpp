@@ -3,14 +3,13 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
+#include <memory>
 #include "GameState.h"
 #include "Menu.h"
-#include "Camera.h"
 #include "Tesseract.h"
-#include "Scene.h"
-#include "Level2.h"
 #include "Renderer.h"
-#include "physics.h"
+#include "Level.h"
+#include "LevelRegistry.h"
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
@@ -78,29 +77,11 @@ int main() {
     Tesseract tesseract;
     Renderer renderer;
 
-    // Level 1 state (lazy-init)
-    bool level1Initialized = false;
-    PhysicsWorld physWorld1;
-    std::vector<Instance4D> scene1;
-    Camera3D cam3D_L1;
-    Camera4D cam4D_L1;
-    PhysicsBody playerBody_L1;
-    float focalLength4D_L1 = 1.5f;
-    bool insideMode_L1 = false;
-    bool tabWasPressed_L1 = false;
-
-    // Level 2 state (lazy-init)
-    bool level2Initialized = false;
-    PhysicsWorld physWorld2;
-    Level2Scene scene2;
-    Object4D treeObj;
-    ObjectBuffer treeBuffer;
-    Camera3D cam3D_L2;
-    Camera4D cam4D_L2;
-    PhysicsBody playerBody_L2;
-    float focalLength4D_L2 = 1.5f;
-    bool insideMode_L2 = false;
-    bool tabWasPressed_L2 = false;
+    // The active level (null in the menu). Constructed lazily from the registry
+    // when the player picks a level; reset() on Back / win frees its resources.
+    std::unique_ptr<Level> level;
+    bool insideMode = false;     // TAB: 3D observer vs 4D FPS
+    bool tabWasPressed = false;
 
     float deltaTime = 0.0f;
     float lastFrame = 0.0f;
@@ -125,98 +106,43 @@ int main() {
         glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / SCR_HEIGHT, 0.1f, 100.0f);
 
         if (state == GameState::MENU) {
-            // Menu state: just render menu
-            state = menu.renderMainMenu(state);
+            int sel = menu.renderMainMenu();
+            if (sel >= 0) {
+                level = levelRegistry()[sel].factory();
+                level->load();
+                insideMode = false;
+                state = GameState::IN_LEVEL;
+                std::cout << "Entered level: " << level->name() << std::endl;
+            }
         }
-        else if (state == GameState::LEVEL_1) {
-            // Initialize Level 1 on first entry
-            if (!level1Initialized) {
-                scene1 = buildScene(physWorld1);
-                playerBody_L1.radius = 0.75f;
-                level1Initialized = true;
-                std::cout << "Initialized Level 1" << std::endl;
-            }
-
-            // Input and rendering
-            // Tab toggle
+        else if (state == GameState::IN_LEVEL && level) {
+            // TAB toggles 3D observer vs 4D FPS (universal across levels).
             bool tabNow = glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS;
-            if (tabNow && !tabWasPressed_L1) {
-                insideMode_L1 = !insideMode_L1;
-            }
-            tabWasPressed_L1 = tabNow;
+            if (tabNow && !tabWasPressed) insideMode = !insideMode;
+            tabWasPressed = tabNow;
 
-            // Focal length adjustment
+            // Focal length adjustment (universal).
             if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
-                focalLength4D_L1 = glm::min(10.0f, focalLength4D_L1 + 2.0f * deltaTime);
+                level->focalLength() = glm::min(10.0f, level->focalLength() + 2.0f * deltaTime);
             if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
-                focalLength4D_L1 = glm::max(0.1f, focalLength4D_L1 - 2.0f * deltaTime);
+                level->focalLength() = glm::max(0.1f, level->focalLength() - 2.0f * deltaTime);
 
-            // Camera input
-            if (!insideMode_L1) {
-                cam3D_L1.processInput(window, deltaTime);
-            } else {
-                cam4D_L1.processInput(window, deltaTime, playerBody_L1, physWorld1);
+            // Update first (moves cam3D), then derive the camera MVPs, then render.
+            LevelContext uctx{window, renderer, tesseract, deltaTime, insideMode,
+                              projection, glm::mat4(1.0f), glm::mat4(1.0f)};
+            level->update(uctx);
+
+            glm::mat4 outerView = level->cam3D().getViewMatrix();
+            glm::mat4 mvp = projection * outerView;
+            LevelContext rctx{window, renderer, tesseract, deltaTime, insideMode,
+                              projection, mvp, mvp};
+            level->render(rctx);
+            level->renderHUD(rctx);
+
+            if (menu.renderBackButton() || level->checkWin()) {
+                level.reset();
+                state = GameState::MENU;
             }
-
-            // Render level 1
-            glm::mat4 outerView = cam3D_L1.getViewMatrix();
-            glm::mat4 outerMVP = projection * outerView;
-            glm::mat4 innerMVP = projection * outerView;
-
-            
-            renderer.drawScene(scene1, tesseract.buffers, cam4D_L1, cam4D_L1.getOrientation(), focalLength4D_L1, tesseract, innerMVP);
-            renderer.drawOuterCube(outerMVP);
-
-            // Render back button
-            state = menu.renderBackButton(state);
-        }
-        else if (state == GameState::LEVEL_2) {
-            // Initialize Level 2 on first entry
-            if (!level2Initialized) {
-                treeObj = Object4D("objects/tree.json");
-                treeBuffer.init(treeObj);
-                scene2 = buildLevel2(physWorld2, treeObj);
-                playerBody_L2.radius = 0.75f;
-                level2Initialized = true;
-                std::cout << "Initialized Level 2" << std::endl;
-            }
-
-            // Input and rendering
-            // Tab toggle
-            bool tabNow = glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS;
-            if (tabNow && !tabWasPressed_L2) {
-                insideMode_L2 = !insideMode_L2;
-            }
-            tabWasPressed_L2 = tabNow;
-
-            // Focal length adjustment
-            if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
-                focalLength4D_L2 = glm::min(10.0f, focalLength4D_L2 + 2.0f * deltaTime);
-            if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
-                focalLength4D_L2 = glm::max(0.1f, focalLength4D_L2 - 2.0f * deltaTime);
-
-            // Camera input
-            if (!insideMode_L2) {
-                cam3D_L2.processInput(window, deltaTime);
-            } else {
-                cam4D_L2.processInput(window, deltaTime, playerBody_L2, physWorld2);
-            }
-
-            // Render level 2
-            glm::mat4 outerView = cam3D_L2.getViewMatrix();
-            glm::mat4 outerMVP = projection * outerView;
-            glm::mat4 innerMVP = projection * outerView;
-
-            
-            // Ground (tesseract instances)
-            renderer.drawScene(scene2.ground, tesseract.buffers, cam4D_L2, cam4D_L2.getOrientation(), focalLength4D_L2, tesseract, innerMVP);
-            // Trees (object4d instances)
-            renderer.drawObjects(scene2.trees, treeObj, treeBuffer, cam4D_L2, cam4D_L2.getOrientation(), focalLength4D_L2, innerMVP);
-            // Outer cube
-            renderer.drawOuterCube(outerMVP);
-
-            // Render back button
-            state = menu.renderBackButton(state);
         }
 
         // Render ImGui
@@ -227,15 +153,13 @@ int main() {
         glfwPollEvents();
     }
 
+    // Free any active level's GL resources while the context is still current.
+    level.reset();
+
     // Cleanup ImGui
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
-
-    // Cleanup level 2 resources
-    if (level2Initialized) {
-        treeBuffer.destroy();
-    }
 
     glfwTerminate();
     return 0;

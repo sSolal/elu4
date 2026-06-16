@@ -222,6 +222,50 @@ TEST_CASE("stress: thousands of mixed-plane rotations stay orthonormal") {
     }
 }
 
+// ---------------------------------------------------------------------------
+// nlerp: used by the camera head-return spring to ease yaw back to a default.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("nlerp endpoints return the (normalized) inputs") {
+    Rotor4D a = Rotor4D::fromZW(0.4f);
+    Rotor4D b = Rotor4D::fromZW(1.3f);
+    Rotor4D at0 = Rotor4D::nlerp(a, b, 0.0f);
+    Rotor4D at1 = Rotor4D::nlerp(a, b, 1.0f);
+    CHECK(at0.s   == doctest::Approx(a.s).epsilon(EPS));
+    CHECK(at0.b34 == doctest::Approx(a.b34).epsilon(EPS));
+    CHECK(at1.s   == doctest::Approx(b.s).epsilon(EPS));
+    CHECK(at1.b34 == doctest::Approx(b.b34).epsilon(EPS));
+}
+
+TEST_CASE("nlerp result is always a unit rotor") {
+    for (float t = 0.0f; t <= 1.0f; t += 0.1f) {
+        Rotor4D r = Rotor4D::nlerp(Rotor4D::fromXW(-1.1f), Rotor4D::fromZW(2.0f), t);
+        INFO("t=", t);
+        CHECK(rotorNorm(r) == doctest::Approx(1.0f).epsilon(EPS));
+    }
+}
+
+TEST_CASE("nlerp takes the short way across the double cover") {
+    // q and -q are the same rotation. nlerp toward the negated rotor must flip
+    // it back, so the result stays near the identity rather than diverging.
+    Rotor4D I = Rotor4D::identity();
+    Rotor4D negI = I * -1.0f;                 // same rotation, opposite sign
+    Rotor4D mid = Rotor4D::nlerp(I, negI, 0.5f);
+    // Sign-fixed: negI flips back to I, so the midpoint is still the identity.
+    CHECK(std::abs(mid.s) == doctest::Approx(1.0f).epsilon(EPS));
+    CHECK(Rotor4D::dot(mid, I) == doctest::Approx(1.0f).epsilon(EPS));
+}
+
+TEST_CASE("nlerp converges toward the target under repeated stepping") {
+    // Mimics the per-frame head-return: repeatedly nlerp the current yaw a small
+    // step toward a fixed target; it must approach the target, not orbit it.
+    Rotor4D target = Rotor4D::identity();
+    Rotor4D yaw = Rotor4D::fromZW(1.0f) * Rotor4D::fromXW(0.6f);
+    for (int i = 0; i < 400; ++i)
+        yaw = Rotor4D::nlerp(yaw, target, 0.1f);
+    CHECK(Rotor4D::dot(yaw, target) == doctest::Approx(1.0f).epsilon(1e-3f));
+}
+
 TEST_CASE("stress without normalization still composes correctly (math, not drift)") {
     // Even without normalize(), a MODEST number of exact compositions should
     // remain near-unit if the geometric product is correct. This isolates

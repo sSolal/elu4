@@ -5,6 +5,63 @@
 #include <cmath>
 #include <algorithm>
 
+// A 4D box (hyperrectangle) with independent half-extents per axis. Same
+// topology as the unit hypercube (16 verts, 24 square faces) — only the vertex
+// positions differ. Making a box THIN in one axis gives a flat slab that reads
+// as a wall/floor rather than a chunky hypercube, which is what corridor walls
+// want: the 4D analog of using a thin plane for a wall in 3D.
+inline Object4D generateBox(const glm::vec4& half) {
+    Object4D box;
+    box.name = "Box";
+
+    for (int i = 0; i < 16; i++) {
+        float x = ((i & 1) ? half.x : -half.x);
+        float y = ((i & 2) ? half.y : -half.y);
+        float z = ((i & 4) ? half.z : -half.z);
+        float w = ((i & 8) ? half.w : -half.w);
+        box.vertices.push_back(glm::vec4(x, y, z, w));
+    }
+
+    // Edges: vertices differing in exactly one coordinate.
+    for (int i = 0; i < 16; i++) {
+        for (int j = i + 1; j < 16; j++) {
+            int diff = i ^ j;
+            if ((diff & (diff - 1)) == 0) box.edges.push_back({i, j});
+        }
+    }
+
+    // Cells (square faces): vertices differing in exactly two coordinates.
+    for (int i = 0; i < 16; i++) {
+        for (int j = i + 1; j < 16; j++) {
+            int diff = i ^ j;
+            if (__builtin_popcount(diff) == 2) {
+                for (int k = 0; k < 16; k++) {
+                    if (k == i || k == j) continue;
+                    if (__builtin_popcount(i ^ k) == 1 && __builtin_popcount(j ^ k) == 1) {
+                        int l = i ^ j ^ k;
+                        if (i < j && i < k && i < l)
+                            box.cells.push_back({i, k, j, l});  // cyclic order
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    for (const auto& quad : box.cells) {
+        if (quad.size() == 4) {
+            box.triangleIndices.push_back(quad[0]);
+            box.triangleIndices.push_back(quad[1]);
+            box.triangleIndices.push_back(quad[2]);
+            box.triangleIndices.push_back(quad[0]);
+            box.triangleIndices.push_back(quad[2]);
+            box.triangleIndices.push_back(quad[3]);
+        }
+    }
+
+    return box;
+}
+
 inline Object4D generateHypercube() {
     Object4D hypercube;
     hypercube.name = "Hypercube";

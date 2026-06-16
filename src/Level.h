@@ -1,0 +1,81 @@
+#pragma once
+
+#include <GL/glew.h>
+#include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
+
+#include "Camera.h"
+#include "physics.h"
+#include "LevelControls.h"
+
+class Renderer;   // fwd — defined in Renderer.h
+class Tesseract;  // fwd — defined in Tesseract.h
+
+// Everything a level needs each frame, supplied by the runner in main.cpp so
+// levels never reach for globals. The runner updates the level first, then
+// computes the camera MVPs and calls render(); update-before-render ordering
+// matters because the MVPs derive from the (just-updated) outside camera.
+struct LevelContext {
+    GLFWwindow* window;
+    Renderer&   renderer;
+    Tesseract&  tesseract;   // shared hypercube topology + GPU buffers
+    float       dt;
+    bool        insideMode;  // TAB state (3D observer vs 4D FPS), owned by runner
+    glm::mat4   projection;
+    glm::mat4   outerMVP;
+    glm::mat4   innerMVP;
+};
+
+// Abstract base for every level. Concrete levels add only their scene data and
+// override the hooks; the common camera/physics/control state lives here so the
+// per-level boilerplate that used to fill main.cpp collapses into the framework.
+class Level {
+public:
+    virtual ~Level() = default;
+
+    virtual const char* name() const = 0;
+
+    // One-time setup: build the scene, register physics AABBs, allocate GPU
+    // resources. Split from the constructor because it needs a live GL context
+    // and runs lazily on first entry. Sets loaded_ = true.
+    virtual void load() = 0;
+    bool isLoaded() const { return loaded_; }
+
+    // Per-frame input + physics + game logic.
+    virtual void update(const LevelContext& ctx) = 0;
+
+    // Per-frame draw calls (4D content + outer cube).
+    virtual void render(const LevelContext& ctx) = 0;
+
+    // Returns true once the win condition is met; the runner then returns to menu.
+    virtual bool checkWin() const { return false; }
+
+    // ImGui HUD / instructional text.
+    virtual void renderHUD(const LevelContext& ctx) {}
+
+    // Space-to-interact hook.
+    virtual void onInteract() {}
+
+    // The runner needs these to drive the outer-cube camera and focal length.
+    Camera3D& cam3D()       { return cam3D_; }
+    Camera4D& cam4D()       { return cam4D_; }
+    float&    focalLength() { return focal_; }
+
+protected:
+    // The standard input path shared by most levels: 3D observer when outside,
+    // 4D FPS (with this level's control config) when TABbed inside.
+    void runCameraInput(const LevelContext& ctx) {
+        if (ctx.insideMode)
+            cam4D_.processInput(ctx.window, ctx.dt, body_, world_, controls_);
+        else
+            cam3D_.processInput(ctx.window, ctx.dt);
+    }
+
+    bool          loaded_ = false;
+    Camera3D      cam3D_;
+    Camera4D      cam4D_;
+    PhysicsWorld  world_;
+    PhysicsBody   body_;
+    float         focal_ = 1.5f;
+    LevelControls controls_;
+};

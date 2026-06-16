@@ -1,15 +1,16 @@
 #pragma once
 
-#include "GameState.h"
-
 class Menu {
 public:
     Menu();
     ~Menu();
 
-    // Returns new state if user clicked a button, or current state if nothing clicked
-    GameState renderMainMenu(GameState current);
-    GameState renderBackButton(GameState current);
+    // Renders the level list. Returns the index of the clicked level, or -1 if
+    // nothing was clicked this frame.
+    int renderMainMenu();
+
+    // Renders the in-level Back button. Returns true if it was clicked.
+    bool renderBackButton();
 
 private:
     bool initialized = false;

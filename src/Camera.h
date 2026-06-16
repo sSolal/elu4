@@ -6,6 +6,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include "physics.h"
 #include "Math4D.h"
+#include "LevelControls.h"
 
 class Camera3D {
 public:
@@ -41,5 +42,6 @@ public:
     Math4D::Rotor4D getOrientation() const {
         return Math4D::Rotor4D::fromYW(glm::radians(pitch)) * yaw;
     }
-    void processInput(GLFWwindow* window, float dt, PhysicsBody& playerBody, PhysicsWorld& physWorld);
+    void processInput(GLFWwindow* window, float dt, PhysicsBody& playerBody, PhysicsWorld& physWorld,
+                      const LevelControls& ctrl = LevelControls{});
 };

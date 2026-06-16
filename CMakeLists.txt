@@ -21,6 +21,9 @@ add_executable(game
     src/Object4D.cpp
     src/ObjectBuffer.cpp
     src/Menu.cpp
+    src/LevelRegistry.cpp
+    src/levels/CorridorLevel.cpp
+    src/levels/StubLevel.cpp
     src/imgui/imgui.cpp
     src/imgui/imgui_draw.cpp
     src/imgui/imgui_widgets.cpp
