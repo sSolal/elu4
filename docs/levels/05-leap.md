@@ -27,8 +27,20 @@ Same orbit-camera + avatar control as Level 4. Adds emphasis on the **jump** mec
 - **Checkpoints**: remember the last safely-landed platform.
 - **Landing detection** per platform (physics `onGround` + which AABB was contacted).
 
-## Open questions
-- Fixed jump or charge-and-release for variable height?
-- Do W-offset platforms appear this level or stay reserved for the plane levels? (Lean
-  toward keeping Leap mostly 3D-feeling: X/Z/Y, with at most one W-gap as a teaser.)
-- Moving platforms? (Probably later.)
+## Resolved (as built)
+- **Fixed jump** (tap Space when grounded → constant arc), reusing Level 4's `JUMP_VEL`.
+  No charge-and-release.
+- **No W-offset gaps.** The course is a straight chain of beams running forward along
+  **-W** (the axis the third-person camera looks down, so W = run forward). All beams
+  share X = Z = 0; the only sideways axes are X/Z, and the beams are **narrow** there —
+  drift off and you fall. W-navigation is reserved for the later plane/maze levels.
+- **Mixed up-and-across** layout: ~8 beams of varying length at varying heights (ups
+  kept ≤ ~0.8 so a fixed jump clears them; longer gaps go downhill).
+- **Sky decorations**: floating tesseracts scattered beside/above the course give motion
+  parallax so forward progress reads over the void. Visual only (no colliders).
+- No moving platforms (reserved for later).
+
+Implemented in `src/levels/LeapLevel.{h,cpp}`. Each beam's visual is one slab; its
+collider is a row of uniform-halfSize cubes tiled along W (the engine's colliders are
+uniform hypercubes). Kill-plane at `KILL_Y` respawns the avatar at the last beam landed
+on; reaching + dwelling on the goal beam wins.

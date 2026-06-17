@@ -4,6 +4,7 @@
 #include "levels/DodgeballLevel.h"
 #include "levels/TurnAndFaceLevel.h"
 #include "levels/Level4ThirdPerson.h"
+#include "levels/LeapLevel.h"
 #include "levels/StubLevel.h"
 
 const std::vector<LevelEntry>& levelRegistry() {
@@ -31,7 +32,10 @@ const std::vector<LevelEntry>& levelRegistry() {
         r.push_back({"4 - Third Person", true,
             [] { return std::unique_ptr<Level>(new Level4ThirdPerson()); }});
 
-        stub("5 - Leap",             "Platforming: time your jumps from platform to platform.");
+        r.push_back({"5 - Leap", true,
+            [] { return std::unique_ptr<Level>(new LeapLevel()); }});
+
+
         stub("6 - Plane (3D-like)",  "Fly through hoops; level flight is just like a 3D plane.");
         stub("7 - Plane (4D course)","Now the hoops curve through 4D - use every direction.");
         stub("8 - Forest Fetch",     "Find the golden object, return it to the NPC, follow directions onward.");

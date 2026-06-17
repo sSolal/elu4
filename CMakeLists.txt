@@ -26,6 +26,7 @@ add_executable(game
     src/levels/DodgeballLevel.cpp
     src/levels/TurnAndFaceLevel.cpp
     src/levels/Level4ThirdPerson.cpp
+    src/levels/LeapLevel.cpp
     src/levels/StubLevel.cpp
     src/imgui/imgui.cpp
     src/imgui/imgui_draw.cpp
