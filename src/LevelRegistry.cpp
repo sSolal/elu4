@@ -5,6 +5,7 @@
 #include "levels/TurnAndFaceLevel.h"
 #include "levels/Level4ThirdPerson.h"
 #include "levels/LeapLevel.h"
+#include "levels/PlaneLevel.h"
 #include "levels/StubLevel.h"
 
 const std::vector<LevelEntry>& levelRegistry() {
@@ -36,7 +37,9 @@ const std::vector<LevelEntry>& levelRegistry() {
             [] { return std::unique_ptr<Level>(new LeapLevel()); }});
 
 
-        stub("6 - Plane (3D-like)",  "Fly through hoops; level flight is just like a 3D plane.");
+        r.push_back({"6 - Plane (3D-like)", true,
+            [] { return std::unique_ptr<Level>(new PlaneLevel()); }});
+
         stub("7 - Plane (4D course)","Now the hoops curve through 4D - use every direction.");
         stub("8 - Forest Fetch",     "Find the golden object, return it to the NPC, follow directions onward.");
         stub("9 - Maze",             "Navigate a 4D maze from entrance to exit.");

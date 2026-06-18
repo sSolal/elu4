@@ -39,6 +39,21 @@ public:
         const RenderSettings& vis
     );
 
+    // Draw a polyline mesh (vertices already in world space) as connected line
+    // segments, ALWAYS visible regardless of vis.geom — unlike drawObjects, which
+    // only emits edges in wireframe/border modes. Used for HUD-style guide lines.
+    void drawPolyline(
+        const Object4D& obj,
+        ObjectBuffer& buf,
+        const Camera4D& cam4D,
+        const Math4D::Rotor4D& camOrientation,
+        float focalLength,
+        const glm::mat4& innerMVP,
+        const RenderSettings& vis,
+        const glm::vec3& color,
+        float width
+    );
+
     void drawOuterCube(const glm::mat4& outerMVP);
 
 private:

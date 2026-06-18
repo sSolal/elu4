@@ -271,6 +271,43 @@ void Renderer::drawObjects(
     glDepthMask(GL_TRUE);
 }
 
+void Renderer::drawPolyline(
+    const Object4D& obj,
+    ObjectBuffer& buf,
+    const Camera4D& cam4D,
+    const Math4D::Rotor4D& camOrientation,
+    float focalLength,
+    const glm::mat4& innerMVP,
+    const RenderSettings& vis,
+    const glm::vec3& color,
+    float width
+) {
+    glDisable(GL_CULL_FACE);
+    glDepthMask(GL_FALSE);
+    setupInnerShader(innerMVP, vis);
+
+    // The polyline's vertices are already in world space; a flat color is given by
+    // setting colorA == colorB (collapses projectObjectInstance's W-gradient).
+    ObjectInstance inst{glm::vec4(0.0f), Math4D::Rotor4D::identity(), color, color};
+
+    std::vector<float> vertData;
+    if (!projectObjectInstance(obj, inst, cam4D.pos, camOrientation, focalLength, vertData)) {
+        glLineWidth(1.0f);
+        glDepthMask(GL_TRUE);
+        return;
+    }
+    buf.uploadVerts(vertData);
+
+    innerShader.setFloat("uInstAlpha", 1.0f);
+    innerShader.setBool("uLineMode", true);
+    innerShader.setFloat("uBorderAmt", 0.0f);
+    glLineWidth(width);
+    buf.drawEdges();
+
+    glLineWidth(1.0f);
+    glDepthMask(GL_TRUE);
+}
+
 void Renderer::drawOuterCube(const glm::mat4& outerMVP) {
     wireShader.use();
     wireShader.setMat4("MVP", outerMVP);

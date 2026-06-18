@@ -62,6 +62,20 @@ inline Object4D generateBox(const glm::vec4& half) {
     return box;
 }
 
+// A polyline of `pointCount` vertices joined by pointCount-1 consecutive edges.
+// Vertices start at the origin — the caller overwrites mesh.vertices with the
+// actual 4D points each frame (the count is fixed so the GPU buffer is allocated
+// once). No cells/triangleIndices: this is a pure line, drawn as GL_LINES.
+inline Object4D generatePolyline(int pointCount) {
+    Object4D line;
+    line.name = "Polyline";
+    if (pointCount < 2) pointCount = 2;
+    line.vertices.assign((size_t)pointCount, glm::vec4(0.0f));
+    for (int i = 0; i + 1 < pointCount; ++i)
+        line.edges.push_back({i, i + 1});
+    return line;
+}
+
 inline Object4D generateHypercube() {
     Object4D hypercube;
     hypercube.name = "Hypercube";
