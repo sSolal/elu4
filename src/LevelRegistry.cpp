@@ -7,6 +7,7 @@
 #include "levels/LeapLevel.h"
 #include "levels/PlaneLevel.h"
 #include "levels/PlaneLevel4D.h"
+#include "levels/ForestFetchLevel.h"
 #include "levels/StubLevel.h"
 
 const std::vector<LevelEntry>& levelRegistry() {
@@ -44,7 +45,9 @@ const std::vector<LevelEntry>& levelRegistry() {
         r.push_back({"7 - Plane (4D course)", true,
             [] { return std::unique_ptr<Level>(new PlaneLevel4D()); }});
 
-        stub("8 - Forest Fetch",     "Find the golden object, return it to the NPC, follow directions onward.");
+        r.push_back({"8 - Forest Fetch", true,
+            [] { return std::unique_ptr<Level>(new ForestFetchLevel()); }});
+
         stub("9 - Maze",             "Navigate a 4D maze from entrance to exit.");
         stub("10 - Big Vista",       "Read distance: near and far detail in one large scene.");
 

@@ -29,6 +29,7 @@ add_executable(game
     src/levels/LeapLevel.cpp
     src/levels/PlaneLevel.cpp
     src/levels/PlaneLevel4D.cpp
+    src/levels/ForestFetchLevel.cpp
     src/levels/StubLevel.cpp
     src/imgui/imgui.cpp
     src/imgui/imgui_draw.cpp

@@ -21,7 +21,7 @@ Axes as the player experiences them:
 | 5 | Leap | Orbit | Y-axis platforming / jump | Design |
 | 6 | Plane (3D-like) | Flight | Up/down + 2 horizontal rotation DOF | Design |
 | 7 | Plane (4D course) | Flight | Hoops curve through 4D | Design |
-| 8 | Forest Fetch | FP | Mapping space, NPC quest | Design |
+| 8 | Forest Fetch | FP | Mapping space, NPC quest | **Built** |
 | 9 | Maze | FP | Spatial navigation | Design |
 | 10 | Big Vista | FP | Reading distance/landscape | Design |
 

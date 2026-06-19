@@ -35,8 +35,23 @@ test). No locks, no head-return.
   pattern).
 - Larger-scene performance check (more instances than current levels).
 
+## Decisions (as built)
+- **Directions:** text directions phrased in the game's axis language ("deep toward +W, past the
+  Tall Red Pine") plus **named landmark trees** — no homing compass/marker. The existing
+  bottom-right Facing and Position HUD gauges give the player live 4D heading/position so the text
+  directions are followable.
+- **Two legs:** NPC asks → fetch the golden cube (+W, past the Tall Red Pine) → carry it back →
+  NPC directs the player to a clearing (-X, past the Crooked Blue Tree) → reaching it wins.
+- **Held object:** the golden cube renders in front of the camera while carried; it does not change
+  the controls and is small enough not to occlude the view.
+
+## Implementation
+`src/levels/ForestFetchLevel.{h,cpp}`. Self-contained (no engine changes): reuses `objects/tree.json`
+(scaled for forest + landmark trees), `generateBox`/`generateHypercube`, the tiled-floor + collider
+idiom, and `hud::drawFacingWidget`/`drawCoordWidget`. The ground is a 3-volume of tiles across
+X-Z-W at the surface; gravity keeps the player grounded. Quest is a small state machine
+(Ask → Fetching → Returning → Directed → Done) driven by proximity + Space.
+
 ## Open questions
-- How are directions expressed so they're learnable but not trivial (named landmarks?
-  cardinal 4D directions? a diegetic compass)?
-- One fetch leg or several?
-- Does the held object occlude the view / change controls?
+- One fetch leg or several? (Built with two; could chain more.)
+- Tune forest density / region size and landmark placement after playtest.
