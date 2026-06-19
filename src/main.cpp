@@ -27,7 +27,8 @@ static void drawLegend(const RenderSettings& vis) {
     static const char* kBg[]    = {"Warm white", "Deep blue", "Black"};
     static const char* kPulse[] = {"off", "Sine (slow)", "Noise"};
 
-    ImGui::SetNextWindowPos(ImVec2(10.0f, (float)SCR_HEIGHT - 158.0f), ImGuiCond_Always);
+    const ImVec2 disp = ImGui::GetIO().DisplaySize;
+    ImGui::SetNextWindowPos(ImVec2(10.0f, disp.y - 158.0f), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(232.0f, 148.0f), ImGuiCond_Always);
     ImGui::Begin("Legend", nullptr,
                  ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
@@ -54,6 +55,7 @@ int main() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
     // Create window
     GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "4D Game", nullptr, nullptr);
@@ -106,6 +108,10 @@ int main() {
     bool insideMode = false;     // TAB: 3D observer vs 4D FPS
     bool tabWasPressed = false;
 
+    // F11 toggles fullscreen; remember the windowed placement so we can restore it.
+    bool f11Was = false;
+    int savedX = 0, savedY = 0, savedW = (int)SCR_WIDTH, savedH = (int)SCR_HEIGHT;
+
     // Global visualization toggles (P/M/N/B/F/V/G), with per-key edge-detection.
     RenderSettings vis;
     bool pWas = false, mWas = false, nWas = false, bWas = false,
@@ -123,6 +129,25 @@ int main() {
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             glfwSetWindowShouldClose(window, true);
 
+        // F11: toggle between windowed and fullscreen on the primary monitor.
+        bool f11Now = glfwGetKey(window, GLFW_KEY_F11) == GLFW_PRESS;
+        if (f11Now && !f11Was) {
+            if (glfwGetWindowMonitor(window) == nullptr) {
+                // Going fullscreen: remember the current windowed placement first.
+                glfwGetWindowPos(window, &savedX, &savedY);
+                glfwGetWindowSize(window, &savedW, &savedH);
+                GLFWmonitor* mon = glfwGetPrimaryMonitor();
+                const GLFWvidmode* mode = glfwGetVideoMode(mon);
+                glfwSetWindowMonitor(window, mon, 0, 0,
+                                     mode->width, mode->height, mode->refreshRate);
+            } else {
+                // Back to windowed at the saved placement.
+                glfwSetWindowMonitor(window, nullptr, savedX, savedY, savedW, savedH, 0);
+            }
+            glfwSwapInterval(1);  // re-assert vsync (some drivers drop it on mode switch)
+        }
+        f11Was = f11Now;
+
         // ImGui new frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
@@ -131,10 +156,16 @@ int main() {
         // Clear screen (background colour follows the B toggle).
         glm::vec3 bg = vis.bgColor();
         glClearColor(bg.r, bg.g, bg.b, 1.0f);
-        glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
+
+        // Follow the live framebuffer size so the scene fills the window at any
+        // size (resize / fullscreen / HiDPI). Guard h==0 while minimized.
+        int fbW, fbH;
+        glfwGetFramebufferSize(window, &fbW, &fbH);
+        glViewport(0, 0, fbW, fbH);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / SCR_HEIGHT, 0.1f, 100.0f);
+        float aspect = fbH > 0 ? (float)fbW / (float)fbH : 1.0f;
+        glm::mat4 projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
 
         if (state == GameState::MENU) {
             int sel = menu.renderMainMenu();
