@@ -10,3 +10,9 @@ build/
 .vscode/
 .idea/
 cmake-build-debug/
+
+# Claude Code harness state (not project source)
+.claude/
+
+# ImGui runtime window-layout persistence (regenerated on run)
+imgui.ini
