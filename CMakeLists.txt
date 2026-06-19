@@ -18,6 +18,7 @@ add_executable(game
     src/Scene.cpp
     src/Level2.cpp
     src/Renderer.cpp
+    src/Minimap.cpp
     src/Object4D.cpp
     src/ObjectBuffer.cpp
     src/Menu.cpp
@@ -30,6 +31,7 @@ add_executable(game
     src/levels/PlaneLevel.cpp
     src/levels/PlaneLevel4D.cpp
     src/levels/ForestFetchLevel.cpp
+    src/levels/MazeLevel.cpp
     src/levels/StubLevel.cpp
     src/imgui/imgui.cpp
     src/imgui/imgui_draw.cpp
