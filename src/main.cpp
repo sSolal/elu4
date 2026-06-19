@@ -26,10 +26,11 @@ static void drawLegend(const RenderSettings& vis) {
     static const char* kAlpha[] = {"Mid 0.35", "Light 0.2", "Heavy 0.85", "Near-transparent"};
     static const char* kBg[]    = {"Warm white", "Deep blue", "Black"};
     static const char* kPulse[] = {"off", "Sine (slow)", "Noise"};
+    static const char* kAid[]   = {"None", "Vignette", "Reflection"};
 
     const ImVec2 disp = ImGui::GetIO().DisplaySize;
-    ImGui::SetNextWindowPos(ImVec2(10.0f, disp.y - 158.0f), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(232.0f, 148.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2(10.0f, disp.y - 176.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(232.0f, 166.0f), ImGuiCond_Always);
     ImGui::Begin("Legend", nullptr,
                  ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
     ImGui::Text("P  Geometry: %s", kGeom[(int)vis.geom]);
@@ -38,6 +39,7 @@ static void drawLegend(const RenderSettings& vis) {
     ImGui::Text("B  Backgnd:  %s", kBg[vis.bg]);
     ImGui::Text("F  Alpha:    %s", kAlpha[(int)vis.alpha]);
     ImGui::Text("V  X-ray pulse: %s", kPulse[(int)vis.pulse]);
+    ImGui::Text("T  Depth aid: %s", kAid[(int)vis.depthAid]);
     ImGui::End();
 }
 
@@ -115,7 +117,7 @@ int main() {
     // Global visualization toggles (P/M/N/B/F/V/G), with per-key edge-detection.
     RenderSettings vis;
     bool pWas = false, mWas = false, nWas = false, bWas = false,
-         fWas = false, vWas = false;
+         fWas = false, vWas = false, tWas = false;
 
     float deltaTime = 0.0f;
     float lastFrame = 0.0f;
@@ -196,6 +198,7 @@ int main() {
             if (edge(GLFW_KEY_B, bWas)) vis.bg    = (vis.bg + 1) % 3;
             if (edge(GLFW_KEY_F, fWas)) vis.alpha = (AlphaMode)(((int)vis.alpha + 1) % 4);
             if (edge(GLFW_KEY_V, vWas)) vis.pulse = (PulseMode)(((int)vis.pulse + 1) % 3);
+            if (edge(GLFW_KEY_T, tWas)) vis.depthAid = (DepthAid)(((int)vis.depthAid + 1) % 3);
             vis.time += deltaTime;  // drives pulse + camera sway
 
             // Focal length adjustment (universal).

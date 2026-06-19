@@ -15,6 +15,7 @@ enum class CamOsc    { Static = 0, Horizontal, Circle, Random };     // M
 enum class DepthCue  { Fog = 0, Normal, DarkenFar };                 // N
 enum class AlphaMode { Mid = 0, Light, Heavy, NearTransparent };     // F
 enum class PulseMode { Off = 0, Sine, Noise };                       // V
+enum class DepthAid  { None = 0, Vignette, Reflection };             // T
 
 struct RenderSettings {
     GeomMode  geom  = GeomMode::SolidBorders;   // default: solid with borders
@@ -22,6 +23,7 @@ struct RenderSettings {
     DepthCue  depth = DepthCue::Fog;            // default: depth fog
     AlphaMode alpha = AlphaMode::Mid;
     PulseMode pulse = PulseMode::Off;
+    DepthAid  depthAid = DepthAid::None;        // T: vignette / face-shadow cues
     int       bg    = 0;                        // default: warm off-white
 
     float time = 0.0f;            // accumulated seconds (pulse + camera sway)

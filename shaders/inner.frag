@@ -1,7 +1,16 @@
 #version 330 core
 in vec3 fragColor;
 in float vDepth;            // camera-relative 4D depth (-v.w)
+in vec3 vWorldPos;          // cube-local position in [-0.5, 0.5]^3
 out vec4 FragColor;
+
+// Depth aids (T). Vignette darkens fragments by their distance from the cube centre
+// (the camera's W line of sight). Shadow mode emits a flat dark patch for the
+// face-projection "reflection" pass.
+uniform int   uVignette;    // 1 = darken away from cube centre
+uniform int   uShadowMode;  // 1 = flat shadow fill (skip normal shading)
+uniform vec3  uShadowColor;
+uniform float uShadowAlpha;
 
 // Depth-cue colour (N): 0 = Fog (far desaturates), 1 = Normal, 2 = DarkenFar
 uniform int   uDepthCue;
@@ -24,6 +33,13 @@ uniform vec3  uBorderTarget;
 uniform float uBorderAmt;
 
 void main() {
+    // Face-shadow pass: flat dark patch, no shading/fog. Overlapping flattened
+    // triangles accumulate via alpha blending → denser core, soft "blob shadow".
+    if (uShadowMode == 1) {
+        FragColor = vec4(uShadowColor, uShadowAlpha);
+        return;
+    }
+
     // Normalised depth in [0,1] across the configured window.
     float nd = clamp((vDepth - uDepthNear) / max(uDepthFar - uDepthNear, 1e-3), 0.0, 1.0);
 
@@ -44,6 +60,14 @@ void main() {
     } else if (uDepthCue == 2) {
         // DarkenFar: far objects fade toward black.
         col *= (1.0 - 0.7 * nd);
+    }
+
+    // --- Vignette (T): darken away from the cube centre ---
+    // Distance from the cube centre runs 0 (origin) → 0.5 (face centre) → ~0.87
+    // (corner). Centre stays full-bright; periphery dims, so a central object reads
+    // as "aligned with the camera's W axis".
+    if (uVignette == 1) {
+        col *= mix(1.0, 0.22, smoothstep(0.0, 0.72, length(vWorldPos)));
     }
 
     if (uLineMode) {

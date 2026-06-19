@@ -84,6 +84,46 @@ namespace {
                               glm::max(vis.depthFar - vis.depthNear, 1e-3f), 0.0f, 1.0f);
         return wNear + (wFar - wNear) * nd;
     }
+
+    // "Reflection" depth aid: cast a soft dark silhouette of an object onto whichever
+    // cube face it is nearest, fading in / tightening as it approaches. Reuses the
+    // geometry already uploaded to `buf` (no re-upload) — the vertex shader flattens
+    // it onto the face and the fragment shader fills it flat (uShadowMode).
+    template <typename Buf>
+    void drawFaceShadow(Shader& sh, Buf& buf, const std::vector<unsigned int>& triIdx,
+                        const glm::vec4& center4D, const glm::mat4& camM,
+                        const glm::vec4& camPos, float focal, const RenderSettings& vis) {
+        const float kShadowRange = 0.22f;       // only objects this close to a face cast one
+
+        glm::vec4 v = camM * (center4D - camPos);
+        if (-v.w <= 1e-4f) return;              // centre behind the camera
+        glm::vec3 pc = Math4D::project4Dto3D(v.x, v.y, v.z, v.w, focal);
+
+        // Nearest face = the axis whose projected coordinate is closest to ±0.5.
+        int axis = 0;
+        for (int k = 1; k < 3; ++k)
+            if (std::fabs(pc[k]) > std::fabs(pc[axis])) axis = k;
+        float dist = glm::max(0.5f - std::fabs(pc[axis]), 0.0f);
+        if (dist > kShadowRange) return;        // mid-cube: no shadow
+
+        float nearness = 1.0f - dist / kShadowRange;            // 0 far … 1 touching face
+        float value = (pc[axis] >= 0.0f ? 0.499f : -0.499f);    // just inside the face
+        // Dark patch on light backgrounds; a pale patch on dark ones so it still reads.
+        glm::vec3 shadowCol = (vis.bg == 0) ? glm::vec3(0.0f) : glm::vec3(0.55f);
+
+        sh.setInt("uFlattenAxis", axis);
+        sh.setFloat("uFlattenValue", value);
+        sh.setVec3("uShadowCentroid", pc);
+        sh.setFloat("uShadowSpread", glm::mix(1.45f, 1.0f, nearness));  // wide+blurry → tight
+        sh.setInt("uShadowMode", 1);
+        sh.setVec3("uShadowColor", shadowCol);
+        sh.setFloat("uShadowAlpha", glm::mix(0.0f, 0.5f, nearness));    // fades in as it nears
+
+        buf.drawSorted(triIdx);
+
+        sh.setInt("uShadowMode", 0);            // restore for the next object's normal pass
+        sh.setInt("uFlattenAxis", -1);
+    }
 }
 
 Renderer::Renderer()
@@ -148,6 +188,17 @@ void Renderer::setupInnerShader(const glm::mat4& innerMVP, const RenderSettings&
     innerShader.setBool("uLineMode", false);
     innerShader.setVec3("uBorderTarget", vis.borderTarget());
     innerShader.setFloat("uBorderAmt", 0.0f);
+
+    // Depth aids (T): vignette is a steady per-fragment darkening; the shadow pass
+    // is off by default and flipped on per-object by drawFaceShadow().
+    innerShader.setInt("uVignette", vis.depthAid == DepthAid::Vignette ? 1 : 0);
+    innerShader.setInt("uShadowMode", 0);
+    innerShader.setInt("uFlattenAxis", -1);
+    innerShader.setFloat("uFlattenValue", 0.0f);
+    innerShader.setVec3("uShadowCentroid", glm::vec3(0.0f));
+    innerShader.setFloat("uShadowSpread", 1.0f);
+    innerShader.setVec3("uShadowColor", glm::vec3(0.0f));
+    innerShader.setFloat("uShadowAlpha", 0.0f);
 }
 
 void Renderer::drawScene(
@@ -205,6 +256,10 @@ void Renderer::drawScene(
                 innerShader.setFloat("uBorderAmt", 0.0f);
             }
         }
+
+        if (vis.depthAid == DepthAid::Reflection)
+            drawFaceShadow(innerShader, tbuf, tesseract.faceIndices,
+                           inst.pos, camM, cam4D.pos, focalLength, vis);
     }
 
     glLineWidth(1.0f);
@@ -265,6 +320,10 @@ void Renderer::drawObjects(
                 innerShader.setFloat("uBorderAmt", 0.0f);
             }
         }
+
+        if (vis.depthAid == DepthAid::Reflection)
+            drawFaceShadow(innerShader, buf, obj.triangleIndices,
+                           inst.pos, camM, cam4D.pos, focalLength, vis);
     }
 
     glLineWidth(1.0f);
