@@ -32,8 +32,14 @@ public:
     void render(const LevelContext& ctx) override;
     bool checkWin() const override { return won_; }
     void renderHUD(const LevelContext& ctx) override;
+    void renderWorldHUD(const LevelContext& ctx) override;
 
 private:
+    // The inner-cube-local point on a face in the active beacon's direction, or
+    // false if there's no dot to show this frame. Shared by the screen-space
+    // (desktop) and 3D world-space (VR) renderings of the direction dot.
+    bool faceDotPoint(const LevelContext& ctx, glm::vec3& outLocal) const;
+
     struct Landmark {
         glm::vec4 worldPos;   // position around the (fixed) player's eye
         bool      faced = false;

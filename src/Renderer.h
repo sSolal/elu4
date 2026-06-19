@@ -56,10 +56,17 @@ public:
 
     void drawOuterCube(const glm::mat4& outerMVP);
 
+    // Draw a small round screen-facing marker (a "dot") at a 3D point, projected
+    // with `mvp`. Constant on-screen size (uSize is half-height in NDC), drawn as
+    // an always-on-top overlay (no depth test). `aspect` is the viewport w/h.
+    void drawMarker(const glm::vec3& center, float sizeNDC, float aspect,
+                    const glm::vec3& color, float alpha, const glm::mat4& mvp);
+
 private:
     // Set the shared inner-shader uniforms (MVP + all depth/alpha/pulse modes).
     void setupInnerShader(const glm::mat4& innerMVP, const RenderSettings& vis);
 
-    Shader innerShader, wireShader;
+    Shader innerShader, wireShader, markerShader;
     GLuint wireEdgeVAO, wireEdgeVBO, wireEdgeEBO;
+    GLuint markerVAO, markerVBO;
 };

@@ -129,7 +129,25 @@ namespace {
 Renderer::Renderer()
     : innerShader("shaders/inner.vert", "shaders/inner.frag"),
       wireShader("shaders/wire.vert", "shaders/wire.frag"),
-      wireEdgeVAO(0), wireEdgeVBO(0), wireEdgeEBO(0) {
+      markerShader("shaders/marker.vert", "shaders/marker.frag"),
+      wireEdgeVAO(0), wireEdgeVBO(0), wireEdgeEBO(0),
+      markerVAO(0), markerVBO(0) {
+    // Unit quad corners in [-1,1] for the screen-facing marker billboard.
+    {
+        const float corners[] = {
+            -1.0f, -1.0f,  1.0f, -1.0f,  1.0f, 1.0f,
+            -1.0f, -1.0f,  1.0f,  1.0f, -1.0f, 1.0f,
+        };
+        glGenVertexArrays(1, &markerVAO);
+        glGenBuffers(1, &markerVBO);
+        glBindVertexArray(markerVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, markerVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(corners), corners, GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+        glBindVertexArray(0);
+    }
+
     // Wireframe cube (edges only, not triangles)
     float wireVertices[] = {
         // 8 vertices of cube at (±0.5, ±0.5, ±0.5)
@@ -171,6 +189,8 @@ Renderer::~Renderer() {
     if (wireEdgeVAO) glDeleteVertexArrays(1, &wireEdgeVAO);
     if (wireEdgeVBO) glDeleteBuffers(1, &wireEdgeVBO);
     if (wireEdgeEBO) glDeleteBuffers(1, &wireEdgeEBO);
+    if (markerVAO)   glDeleteVertexArrays(1, &markerVAO);
+    if (markerVBO)   glDeleteBuffers(1, &markerVBO);
 }
 
 void Renderer::setupInnerShader(const glm::mat4& innerMVP, const RenderSettings& vis) {
@@ -372,4 +392,22 @@ void Renderer::drawOuterCube(const glm::mat4& outerMVP) {
     wireShader.setMat4("MVP", outerMVP);
     glBindVertexArray(wireEdgeVAO);
     glDrawElements(GL_LINES, 24, GL_UNSIGNED_INT, 0);
+}
+
+void Renderer::drawMarker(const glm::vec3& center, float sizeNDC, float aspect,
+                          const glm::vec3& color, float alpha, const glm::mat4& mvp) {
+    // Always-on-top overlay dot: no depth test, but keep the alpha blend the rest
+    // of the scene uses. Restore depth testing afterwards.
+    glDisable(GL_DEPTH_TEST);
+    markerShader.use();
+    markerShader.setMat4("MVP", mvp);
+    markerShader.setVec3("uCenter", center);
+    markerShader.setFloat("uSize", sizeNDC);
+    markerShader.setFloat("uAspect", aspect);
+    markerShader.setVec3("uColor", color);
+    markerShader.setFloat("uAlpha", alpha);
+    glBindVertexArray(markerVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
+    glEnable(GL_DEPTH_TEST);
 }

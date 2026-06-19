@@ -31,6 +31,10 @@ int Menu::renderMainMenu() {
         if (ImGui::Button(e.name.c_str(), ImVec2(-1, 36)))
             selected = i;
 
+        // Give keyboard/gamepad nav (used in VR) an initial focus to land on.
+        if (i == 0)
+            ImGui::SetItemDefaultFocus();
+
         if (!e.implemented)
             ImGui::PopStyleColor();
 

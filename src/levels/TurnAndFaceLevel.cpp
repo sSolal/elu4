@@ -191,6 +191,34 @@ void TurnAndFaceLevel::render(const LevelContext& ctx) {
     ctx.renderer.drawOuterCube(ctx.outerMVP);
 }
 
+bool TurnAndFaceLevel::faceDotPoint(const LevelContext& ctx, glm::vec3& outLocal) const {
+    // The dot only shows once you've been hunting a while and aren't on target.
+    if (!(ctx.insideMode && !won_ && activeIdx_ < (int)marks_.size()
+          && activeTimer_ > HINT_DELAY && !pointing_))
+        return false;
+    const Landmark& a = marks_[activeIdx_];
+    glm::vec4 cs = cam4D_.getOrientation().toMatrix() * (a.worldPos - cam4D_.pos);
+    glm::vec3 lat(cs.x, cs.y, cs.z);
+    if (glm::length(lat) <= 1e-3f) return false;
+    lat = glm::normalize(lat);
+    float m = std::max(std::fabs(lat.x), std::max(std::fabs(lat.y), std::fabs(lat.z)));
+    outLocal = 0.48f * lat / m;   // on the inner-cube face, in the beacon's direction
+    return true;
+}
+
+void TurnAndFaceLevel::renderWorldHUD(const LevelContext& ctx) {
+    // VR: draw the direction dot as a real 3D marker on the cube face (projected
+    // with the per-eye MVP) instead of as a flat ImGui overlay on the HUD panel.
+    glm::vec3 dot;
+    if (!faceDotPoint(ctx, dot)) return;
+    GLint vp[4];
+    glGetIntegerv(GL_VIEWPORT, vp);
+    float aspect = vp[3] > 0 ? (float)vp[2] / (float)vp[3] : 1.0f;
+    float pulse = 0.5f + 0.5f * std::sin(ctx.vis.time * 5.0f);
+    ctx.renderer.drawMarker(dot, 0.045f, aspect, glm::vec3(1.0f), 0.55f + 0.45f * pulse,
+                            ctx.innerMVP);
+}
+
 void TurnAndFaceLevel::renderHUD(const LevelContext& ctx) {
     const ImVec2 disp = ImGui::GetIO().DisplaySize;
 
@@ -198,23 +226,17 @@ void TurnAndFaceLevel::renderHUD(const LevelContext& ctx) {
     // overlay, not a scene object). After hunting too long, it sits on the inner
     // cube's face in the beacon's direction. We project the cube-face point with
     // the SAME innerMVP the scene uses, so it tracks the observer camera exactly.
-    if (ctx.insideMode && !won_ && activeIdx_ < (int)marks_.size()
-        && activeTimer_ > HINT_DELAY && !pointing_) {
-        const Landmark& a = marks_[activeIdx_];
-        glm::vec4 cs = cam4D_.getOrientation().toMatrix() * (a.worldPos - cam4D_.pos);
-        glm::vec3 lat(cs.x, cs.y, cs.z);
-        if (glm::length(lat) > 1e-3f) {
-            lat = glm::normalize(lat);
-            float m = std::max(std::fabs(lat.x), std::max(std::fabs(lat.y), std::fabs(lat.z)));
-            glm::vec4 clip = ctx.innerMVP * glm::vec4(0.48f * lat / m, 1.0f);  // on the cube face
-            if (clip.w > 1e-4f) {
-                float sx = (clip.x / clip.w * 0.5f + 0.5f) * disp.x;
-                float sy = (1.0f - (clip.y / clip.w * 0.5f + 0.5f)) * disp.y;
-                float pulse = 0.5f + 0.5f * std::sin(ctx.vis.time * 5.0f);
-                ImDrawList* dl = ImGui::GetForegroundDrawList();
-                dl->AddCircleFilled(ImVec2(sx, sy), 12.0f, IM_COL32(255, 255, 255, (int)(80 * pulse)));
-                dl->AddCircleFilled(ImVec2(sx, sy), 5.0f,  IM_COL32(255, 255, 255, 255));
-            }
+    // In VR this is drawn in 3D by renderWorldHUD instead (worldHUD == true).
+    glm::vec3 dotLocal;
+    if (!ctx.worldHUD && faceDotPoint(ctx, dotLocal)) {
+        glm::vec4 clip = ctx.innerMVP * glm::vec4(dotLocal, 1.0f);  // on the cube face
+        if (clip.w > 1e-4f) {
+            float sx = (clip.x / clip.w * 0.5f + 0.5f) * disp.x;
+            float sy = (1.0f - (clip.y / clip.w * 0.5f + 0.5f)) * disp.y;
+            float pulse = 0.5f + 0.5f * std::sin(ctx.vis.time * 5.0f);
+            ImDrawList* dl = ImGui::GetForegroundDrawList();
+            dl->AddCircleFilled(ImVec2(sx, sy), 12.0f, IM_COL32(255, 255, 255, (int)(80 * pulse)));
+            dl->AddCircleFilled(ImVec2(sx, sy), 5.0f,  IM_COL32(255, 255, 255, 255));
         }
     }
 

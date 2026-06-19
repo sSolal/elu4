@@ -81,6 +81,23 @@ target_link_libraries(game
     glm::glm
 )
 
+# Optional OpenXR VR support (Route A — PCVR via WiVRn/Monado). Off by default so
+# the plain desktop build needs no OpenXR/X11 dev packages. Enable with:
+#   cmake -S . -B build -DBUILD_VR=ON
+option(BUILD_VR "Build the game with OpenXR VR support" OFF)
+if(BUILD_VR)
+    find_library(OPENXR_LOADER openxr_loader REQUIRED)
+    find_package(X11 REQUIRED)
+    target_sources(game PRIVATE src/VR.cpp)
+    target_compile_definitions(game PRIVATE
+        HAVE_OPENXR
+        GLFW_EXPOSE_NATIVE_X11
+        GLFW_EXPOSE_NATIVE_GLX
+    )
+    target_link_libraries(game ${OPENXR_LOADER} OpenGL::GLX ${X11_LIBRARIES})
+    message(STATUS "VR build enabled (OpenXR loader: ${OPENXR_LOADER})")
+endif()
+
 target_link_libraries(visualizer
     OpenGL::OpenGL
     GLEW::GLEW

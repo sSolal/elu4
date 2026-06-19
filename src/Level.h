@@ -26,6 +26,7 @@ struct LevelContext {
     glm::mat4   outerMVP;
     glm::mat4   innerMVP;
     RenderSettings& vis;     // global visualization toggles, owned by runner
+    bool        worldHUD = false;  // VR: HUD lives in the 3D world, not screen-space
 };
 
 // Abstract base for every level. Concrete levels add only their scene data and
@@ -52,8 +53,14 @@ public:
     // Returns true once the win condition is met; the runner then returns to menu.
     virtual bool checkWin() const { return false; }
 
-    // ImGui HUD / instructional text.
+    // ImGui HUD / instructional text (screen-space).
     virtual void renderHUD(const LevelContext& ctx) {}
+
+    // 3D world-space HUD markers, drawn in the scene pass with the per-eye MVP in
+    // ctx.innerMVP. Used in VR for things that must live on the cube (e.g. the
+    // direction dot on a cube face) instead of as a flat ImGui overlay. Called
+    // only when ctx.worldHUD is true. Default: nothing.
+    virtual void renderWorldHUD(const LevelContext& ctx) {}
 
     // Space-to-interact hook.
     virtual void onInteract() {}
