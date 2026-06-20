@@ -1,5 +1,6 @@
 #include "Renderer.h"
 #include <cmath>
+#include <cstdio>
 #include <algorithm>
 #include <utility>
 
@@ -49,6 +50,112 @@ namespace {
             return da > db;  // farthest first
         });
         return order;
+    }
+
+    // Max occluders uploaded to inner.frag (must match MAX_OCC there).
+    constexpr int kMaxOccluders = 32;
+
+    // Per-frame occluder arrays packed for the inner-shader uniform arrays.
+    struct OccUpload {
+        std::vector<glm::vec4> center;  // N centers (4D camera space)
+        std::vector<glm::vec4> axis;    // 4N unit slab axes (4D camera space)
+        std::vector<glm::vec4> half;    // N per-axis half-extents
+        std::vector<int>       slotOf;  // instance index -> occluder slot (-1 if dropped)
+        int count = 0;
+        int slot(size_t instIdx) const {
+            return instIdx < slotOf.size() ? slotOf[instIdx] : -1;
+        }
+    };
+
+    // Build the occluder set for one box-family draw call: every instance is a solid
+    // 4-volume |axis_k.(v-center)| <= half_k. When there are more than the cap, keep
+    // the nearest (depthSortInstances is far→near, so the tail). halfExt is the mesh's
+    // local half-extents (same for all its instances).
+    template <typename Inst>
+    OccUpload buildOccluders(const std::vector<Inst>& instances, const glm::vec4& halfExt,
+                             const glm::vec4& camPos, const glm::mat4& camM) {
+        OccUpload up;
+        const int n = (int)instances.size();
+        up.slotOf.assign(n, -1);
+        std::vector<size_t> idx;
+        if (n <= kMaxOccluders) {
+            idx.resize(n);
+            for (int i = 0; i < n; ++i) idx[i] = (size_t)i;
+        } else {
+            std::vector<size_t> order = depthSortInstances(instances, camPos, camM);
+            for (int i = n - kMaxOccluders; i < n; ++i) idx.push_back(order[i]);
+            static bool warned = false;
+            if (!warned) {
+                warned = true;
+                std::fprintf(stderr,
+                    "[4D occlusion] %d box instances exceed cap %d; using nearest.\n",
+                    n, kMaxOccluders);
+            }
+        }
+        up.center.reserve(idx.size());
+        up.axis.reserve(idx.size() * 4);
+        up.half.reserve(idx.size());
+        for (size_t s = 0; s < idx.size(); ++s) {
+            size_t i = idx[s];
+            up.slotOf[i] = (int)s;
+            glm::mat4 objM = instances[i].orientation.toMatrix();
+            up.center.push_back(camM * (instances[i].pos - camPos));
+            for (int k = 0; k < 4; ++k) up.axis.push_back(camM * objM[k]);  // objM[k] = objM*e_k
+            up.half.push_back(halfExt);
+        }
+        up.count = (int)idx.size();
+        return up;
+    }
+
+    // Push an occluder set into the inner shader (or disable the pass).
+    void uploadOccluders(Shader& sh, const OccUpload& occ, bool enabled) {
+        const bool on = enabled && occ.count > 0;
+        sh.setBool("uOcclude", on);
+        sh.setInt("uOccCount", on ? occ.count : 0);
+        sh.setInt("uSelfIndex", -1);  // per-instance value set in the draw loop
+        if (on) {
+            sh.setVec4Array("uOccCenter", occ.center.data(), occ.count);
+            sh.setVec4Array("uOccAxis", occ.axis.data(), occ.count * 4);
+            sh.setVec4Array("uOccHalf", occ.half.data(), occ.count);
+        }
+    }
+
+    // 4D back-cell culling for ONE convex box-family instance: emit only the
+    // triangles on a 3-cell that faces the 4D eye. A box has 8 cells (axis k ∈ 0..3,
+    // sign s ∈ ±); a quad-face is fixed at the extreme on its two cell axes, so a
+    // triangle lies on cell (k,s) iff all three of its verts are extreme there. The
+    // eye sits at w=focal; cell (k,s) faces it iff s·g_k > half_k, where
+    // g_k = focal·col_k.w − dot(col_k, center) and col_k is e_k rotated into camera
+    // space. For a convex solid the front cells are exactly the visible near shell,
+    // so this is exact (no interpolation, unlike the per-fragment shader path).
+    void cullBackCells(const glm::vec4* localVerts,
+                       const std::vector<unsigned int>& triIdx,
+                       const glm::vec4& half, const glm::mat4& camMobjM,
+                       const glm::vec4& center, float focal,
+                       std::vector<unsigned int>& out) {
+        bool fPlus[4], fMinus[4];
+        for (int k = 0; k < 4; ++k) {
+            glm::vec4 col = camMobjM[k];                       // e_k rotated to camera space
+            float g = focal * col.w - glm::dot(col, center);
+            fPlus[k]  = g >  half[k];
+            fMinus[k] = g < -half[k];
+        }
+        const float E = 1e-4f;
+        out.clear();
+        out.reserve(triIdx.size());
+        for (size_t t = 0; t + 2 < triIdx.size(); t += 3) {
+            unsigned a = triIdx[t], b = triIdx[t + 1], c = triIdx[t + 2];
+            const glm::vec4& A = localVerts[a];
+            const glm::vec4& B = localVerts[b];
+            const glm::vec4& C = localVerts[c];
+            bool visible = false;
+            for (int k = 0; k < 4 && !visible; ++k) {
+                float hk = half[k];
+                if (A[k] > hk - E && B[k] > hk - E && C[k] > hk - E)        visible = fPlus[k];
+                else if (A[k] < -hk + E && B[k] < -hk + E && C[k] < -hk + E) visible = fMinus[k];
+            }
+            if (visible) { out.push_back(a); out.push_back(b); out.push_back(c); }
+        }
     }
 
     // Deterministic [0,1) hash for value noise.
@@ -193,10 +300,15 @@ Renderer::~Renderer() {
     if (markerVBO)   glDeleteBuffers(1, &markerVBO);
 }
 
-void Renderer::setupInnerShader(const glm::mat4& innerMVP, const RenderSettings& vis) {
+void Renderer::setupInnerShader(const glm::mat4& innerMVP, float focalLength, const RenderSettings& vis) {
     innerShader.use();
     innerShader.setMat4("MVP", innerMVP);
     innerShader.setMat4("innerView", glm::mat4(1.0f));
+    // 4D occlusion: off by default; box-family draw calls re-enable it after
+    // uploading their occluder set. uFocal feeds the ray reconstruction.
+    innerShader.setFloat("uFocal", focalLength);
+    innerShader.setBool("uOcclude", false);
+    innerShader.setInt("uOccCount", 0);
     innerShader.setInt("uDepthCue", (int)vis.depth);
     innerShader.setInt("uAlphaMode", (int)vis.alpha);
     innerShader.setFloat("uDepthNear", vis.depthNear);
@@ -234,10 +346,19 @@ void Renderer::drawScene(
     glDisable(GL_CULL_FACE);  // show both sides of faces
     glDepthMask(GL_FALSE);    // don't write to depth buffer
 
-    setupInnerShader(innerMVP, vis);
+    setupInnerShader(innerMVP, focalLength, vis);
     const bool wire    = (vis.geom == GeomMode::Wireframe);
     const bool borders = (vis.geom == GeomMode::SolidBorders);
     const glm::mat4 camM = camOrientation.toMatrix();
+
+    // 4D hidden-surface removal: every tesseract instance is a solid box of half-HS.
+    // CPU back-cell culling hides each instance's own far cells (exact, convex); the
+    // shader occluder set hides surfaces behind OTHER instances.
+    const glm::vec4 boxHalf(Tesseract::HS);
+    const bool occOn = vis.occlude4D;
+    OccUpload occ;
+    if (occOn) occ = buildOccluders(instances, boxHalf, cam4D.pos, camM);
+    uploadOccluders(innerShader, occ, occOn);
 
     // Painter's order between instances: draw the farthest 4D depth first so nearer
     // objects paint over farther ones (transparency has no depth buffer to lean on).
@@ -245,6 +366,7 @@ void Renderer::drawScene(
 
     std::vector<float> instVertData;
     std::vector<unsigned int> sortedIdx;
+    std::vector<unsigned int> visIdx;
 
     for (size_t oi = 0; oi < order.size(); ++oi) {
         size_t i = order[oi];
@@ -253,11 +375,13 @@ void Renderer::drawScene(
             continue;
         tbuf.uploadVerts(instVertData);
 
-        float cd = -(camM * (inst.pos - cam4D.pos)).w;  // instance-centre 4D depth
+        glm::vec4 center_i = camM * (inst.pos - cam4D.pos);
+        float cd = -center_i.w;  // instance-centre 4D depth
         int seed = (int)i * 3 + (int)std::floor(cd * 4.0f) * 101;
         float instA = (vis.pulse == PulseMode::Off) ? 1.0f
                                                     : pulseFactor(vis.pulse, vis.time, seed);
         innerShader.setFloat("uInstAlpha", instA);
+        innerShader.setInt("uSelfIndex", occOn ? occ.slot(i) : -1);
 
         if (wire) {
             glLineWidth(lineWidthForDepth(cd, vis, 2.0f, 0.7f));
@@ -266,7 +390,13 @@ void Renderer::drawScene(
             tbuf.drawEdges();
         } else {
             innerShader.setBool("uLineMode", false);
-            depthSortTriangles(instVertData, tesseract.faceIndices, sortedIdx);
+            const std::vector<unsigned int>* idxList = &tesseract.faceIndices;
+            if (occOn) {
+                cullBackCells(tesseract.verts4D.data(), tesseract.faceIndices, boxHalf,
+                              camM * inst.orientation.toMatrix(), center_i, focalLength, visIdx);
+                idxList = &visIdx;
+            }
+            depthSortTriangles(instVertData, *idxList, sortedIdx);
             tbuf.drawSorted(sortedIdx);
             if (borders) {
                 glLineWidth(lineWidthForDepth(cd, vis, 2.6f, 0.8f));
@@ -299,16 +429,24 @@ void Renderer::drawObjects(
     glDisable(GL_CULL_FACE);
     glDepthMask(GL_FALSE);
 
-    setupInnerShader(innerMVP, vis);
+    setupInnerShader(innerMVP, focalLength, vis);
     const bool wire    = (vis.geom == GeomMode::Wireframe);
     const bool borders = (vis.geom == GeomMode::SolidBorders);
     const glm::mat4 camM = camOrientation.toMatrix();
+
+    // 4D hidden-surface removal: only box-family meshes are solid 4-volumes that can
+    // occlude (and self-cull). Other meshes (trees, hypersphere) keep drawing in full.
+    const bool occOn = vis.occlude4D && obj.isBox;
+    OccUpload occ;
+    if (occOn) occ = buildOccluders(instances, obj.boxHalf, cam4D.pos, camM);
+    uploadOccluders(innerShader, occ, occOn);
 
     // Painter's order between instances: farthest 4D depth first (see drawScene).
     std::vector<size_t> order = depthSortInstances(instances, cam4D.pos, camM);
 
     std::vector<float> objVertData;
     std::vector<unsigned int> sortedIdx;
+    std::vector<unsigned int> visIdx;
 
     for (size_t oi = 0; oi < order.size(); ++oi) {
         size_t i = order[oi];
@@ -317,11 +455,13 @@ void Renderer::drawObjects(
             continue;
         buf.uploadVerts(objVertData);
 
-        float cd = -(camM * (inst.pos - cam4D.pos)).w;  // instance-centre 4D depth
+        glm::vec4 center_i = camM * (inst.pos - cam4D.pos);
+        float cd = -center_i.w;  // instance-centre 4D depth
         int seed = (int)i * 3 + (int)std::floor(cd * 4.0f) * 101;
         float instA = (vis.pulse == PulseMode::Off) ? 1.0f
                                                     : pulseFactor(vis.pulse, vis.time, seed);
         innerShader.setFloat("uInstAlpha", instA);
+        innerShader.setInt("uSelfIndex", occOn ? occ.slot(i) : -1);
 
         if (wire) {
             glLineWidth(lineWidthForDepth(cd, vis, 2.0f, 0.7f));
@@ -330,7 +470,13 @@ void Renderer::drawObjects(
             buf.drawEdges();
         } else {
             innerShader.setBool("uLineMode", false);
-            depthSortTriangles(objVertData, obj.triangleIndices, sortedIdx);
+            const std::vector<unsigned int>* idxList = &obj.triangleIndices;
+            if (occOn) {
+                cullBackCells(obj.vertices.data(), obj.triangleIndices, obj.boxHalf,
+                              camM * inst.orientation.toMatrix(), center_i, focalLength, visIdx);
+                idxList = &visIdx;
+            }
+            depthSortTriangles(objVertData, *idxList, sortedIdx);
             buf.drawSorted(sortedIdx);
             if (borders) {
                 glLineWidth(lineWidthForDepth(cd, vis, 2.6f, 0.8f));
@@ -363,7 +509,7 @@ void Renderer::drawPolyline(
 ) {
     glDisable(GL_CULL_FACE);
     glDepthMask(GL_FALSE);
-    setupInnerShader(innerMVP, vis);
+    setupInnerShader(innerMVP, focalLength, vis);  // leaves uOcclude=false: guide lines always show
 
     // The polyline's vertices are already in world space; a flat color is given by
     // setting colorA == colorB (collapses projectObjectInstance's W-gradient).

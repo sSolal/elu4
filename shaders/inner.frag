@@ -2,7 +2,81 @@
 in vec3 fragColor;
 in float vDepth;            // camera-relative 4D depth (-v.w)
 in vec3 vWorldPos;          // cube-local position in [-0.5, 0.5]^3
+in vec3 vProjPos;           // raw 4D→3D projected position (for 4D occlusion)
 out vec4 FragColor;
+
+// ---- 4D hidden-surface removal -------------------------------------------------
+// Each box-family solid is fed in as an occluder: a 4-volume |axis_k.(v-center)| <=
+// half_k (k=0..3) in 4D camera space. A fragment is discarded when some occluder's
+// solid lies nearer the 4D camera than the fragment along the SAME 4D line of sight
+// (the W projection ray) — i.e. genuinely hidden in 4D, even though we never write a
+// 3D depth buffer (so things merely overlapping in the 3D view still both show).
+#define MAX_OCC 32
+uniform bool  uOcclude;             // master switch (C toggle)
+uniform int   uOccCount;
+uniform int   uSelfIndex;           // occluder slot of the instance being drawn; skipped
+uniform float uFocal;               // W-perspective focal length; 4D eye sits at w=uFocal
+uniform vec4  uOccCenter[MAX_OCC];  // occluder center, 4D camera space
+uniform vec4  uOccAxis[MAX_OCC * 4];// 4 unit slab axes per occluder, 4D camera space
+uniform vec4  uOccHalf[MAX_OCC];    // per-axis half-extents (x,y,z,w)
+
+// The fragment's 4D line of sight is the ray v(t) = (P*(uFocal - t), t) through its
+// 3D image point P (t = camera-space W). Return the W-interval [tlo,thi] in which
+// occluder o's solid covers this ray (tlo>thi ⇒ the ray misses it).
+vec2 occInterval(int o, vec3 P) {
+    vec4 c = uOccCenter[o];
+    vec4 h = uOccHalf[o];
+    float tlo = -1e30, thi = 1e30;
+    for (int k = 0; k < 4; ++k) {
+        vec4  ax = uOccAxis[o * 4 + k];
+        float Ak = dot(ax.xyz, P);
+        float Bk = dot(ax, c);
+        // axis_k . v(t) - axis_k.c = (Ak*uFocal - Bk) + t*(ax.w - Ak)
+        float pk = Ak * uFocal - Bk;
+        float qk = ax.w - Ak;
+        float hk = h[k];
+        if (abs(qk) < 1e-6) {
+            if (abs(pk) > hk) return vec2(1.0, -1.0);       // ray parallel & outside slab
+        } else {
+            float ta = (-hk - pk) / qk;
+            float tb = ( hk - pk) / qk;
+            tlo = max(tlo, min(ta, tb));
+            thi = min(thi, max(ta, tb));
+        }
+    }
+    return vec2(tlo, thi);
+}
+
+// True if some solid lies nearer the 4D eye than this fragment along the same ray.
+bool occluded4D() {
+    vec3 P = vProjPos;
+    // Exact fragment depth: the fragment sits on its OWN box's surface, so its W is
+    // one of that box's two ray crossings (tlo/thi from the slabs — no interpolation,
+    // unlike -vDepth which is projectively warped and would speckle). The interpolated
+    // depth only disambiguates which crossing.
+    float td = -vDepth;
+    float tFrag = td;
+    if (uSelfIndex >= 0) {
+        vec2 s = occInterval(uSelfIndex, P);
+        if (s.x <= s.y) tFrag = (abs(td - s.x) < abs(td - s.y)) ? s.x : s.y;
+    }
+    // A fragment is hidden only by solid that lies strictly BETWEEN it and the camera
+    // along the ray: camera-frame W in (tFrag, 0). Larger W = nearer the camera; the
+    // camera plane is at W=0 (in front is W<0). Clamping the occluder's near reach to
+    // 0 is essential — without it, cubes the camera has already moved past (now behind
+    // it, W>0) would still "occlude" everything ahead and blink the corridor out.
+    // Including the fragment's own box culls its far faces / hidden border edges.
+    // EPS lets abutting/coincident surfaces tie instead of flickering.
+    const float EPS = 1e-3;
+    for (int o = 0; o < uOccCount; ++o) {
+        vec2 iv = occInterval(o, P);
+        if (iv.x > iv.y) continue;                   // ray misses this occluder
+        float lo = max(iv.x, tFrag);                 // not behind the fragment
+        float hi = min(iv.y, 0.0);                   // not behind the camera plane
+        if (hi > lo + EPS) return true;              // solid in front of the fragment
+    }
+    return false;
+}
 
 // Depth aids (T). Vignette darkens fragments by their distance from the cube centre
 // (the camera's W line of sight). Shadow mode emits a flat dark patch for the
@@ -39,6 +113,9 @@ void main() {
         FragColor = vec4(uShadowColor, uShadowAlpha);
         return;
     }
+
+    // 4D hidden-surface removal: drop fragments genuinely occluded in 4D.
+    if (uOcclude && occluded4D()) discard;
 
     // Normalised depth in [0,1] across the configured window.
     float nd = clamp((vDepth - uDepthNear) / max(uDepthFar - uDepthNear, 1e-3), 0.0, 1.0);

@@ -18,6 +18,7 @@ uniform float uShadowSpread;
 out vec3 fragColor;
 out float vDepth;
 out vec3 vWorldPos;        // cube-local position (innerView is identity → == aPos)
+out vec3 vProjPos;         // raw 4D→3D projected position (pre-flatten); for 4D occlusion
 
 void main() {
     // Cube-local position. For the shadow pass, flatten/spread it onto a face.
@@ -30,6 +31,7 @@ void main() {
     gl_Position = MVP * vec4(lp, 1.0);
     fragColor = aColor;
     vDepth = aDepth;
+    vProjPos = aPos;       // unaffected by the shadow-pass flatten
 
     // Compute position in cube-local space (for clipping to [-0.5, 0.5])
     vec4 worldPos = innerView * vec4(lp, 1.0);

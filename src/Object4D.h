@@ -12,6 +12,13 @@ struct Object4D {
     std::vector<std::vector<int>> cells;  // Each cell is a list of vertex indices (polygon in 4D)
     std::vector<unsigned int> triangleIndices;  // Pre-triangulated face indices for rendering
 
+    // 4D occlusion (per-fragment, see Renderer/inner.frag). A box-family mesh is a
+    // solid 4-volume |coord_k| <= boxHalf[k]; the renderer feeds it to the shader as
+    // an occluder so surfaces genuinely behind it in 4D are hidden. Non-box meshes
+    // leave isBox=false and neither occlude nor get culled.
+    bool      isBox   = false;
+    glm::vec4 boxHalf = glm::vec4(0.0f);  // local half-extents (valid when isBox)
+
     Object4D() = default;
     Object4D(const std::string& filePath);
 

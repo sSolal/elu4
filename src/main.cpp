@@ -33,8 +33,8 @@ static void drawLegend(const RenderSettings& vis) {
     static const char* kAid[]   = {"None", "Vignette", "Reflection"};
 
     const ImVec2 disp = ImGui::GetIO().DisplaySize;
-    ImGui::SetNextWindowPos(ImVec2(10.0f, disp.y - 176.0f), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(232.0f, 166.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2(10.0f, disp.y - 194.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(232.0f, 184.0f), ImGuiCond_Always);
     ImGui::Begin("Legend", nullptr,
                  ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
     ImGui::Text("P  Geometry: %s", kGeom[(int)vis.geom]);
@@ -44,6 +44,7 @@ static void drawLegend(const RenderSettings& vis) {
     ImGui::Text("F  Alpha:    %s", kAlpha[(int)vis.alpha]);
     ImGui::Text("V  X-ray pulse: %s", kPulse[(int)vis.pulse]);
     ImGui::Text("T  Depth aid: %s", kAid[(int)vis.depthAid]);
+    ImGui::Text("C  4D occlude: %s", vis.occlude4D ? "On" : "Off");
     ImGui::End();
 }
 
@@ -165,7 +166,7 @@ int main(int argc, char** argv) {
     // Global visualization toggles (P/M/N/B/F/V/G), with per-key edge-detection.
     RenderSettings vis;
     bool pWas = false, mWas = false, nWas = false, bWas = false,
-         fWas = false, vWas = false, tWas = false;
+         fWas = false, vWas = false, tWas = false, cWas = false;
 
     float deltaTime = 0.0f;
     float lastFrame = 0.0f;
@@ -191,7 +192,7 @@ int main(int argc, char** argv) {
 
             // Edge-detect helper + per-key state (mirrors the desktop hotkeys).
             bool escWas = false, tabWas = false, backWas = false;
-            bool pW=false,mW=false,nW=false,bW=false,fW=false,vW=false,tW=false;
+            bool pW=false,mW=false,nW=false,bW=false,fW=false,vW=false,tW=false,cW=false;
             auto edge = [&](int key, bool& was) {
                 bool now = glfwGetKey(window, key) == GLFW_PRESS;
                 bool fired = now && !was; was = now; return fired;
@@ -230,6 +231,7 @@ int main(int argc, char** argv) {
                     if (edge(GLFW_KEY_F,fW)) vis.alpha=(AlphaMode)(((int)vis.alpha+1)%4);
                     if (edge(GLFW_KEY_V,vW)) vis.pulse=(PulseMode)(((int)vis.pulse+1)%3);
                     if (edge(GLFW_KEY_T,tW)) vis.depthAid=(DepthAid)(((int)vis.depthAid+1)%3);
+                    if (edge(GLFW_KEY_C,cW)) vis.occlude4D = !vis.occlude4D;
                     if (glfwGetKey(window,GLFW_KEY_UP)==GLFW_PRESS)
                         level->focalLength()=glm::min(10.0f, level->focalLength()+2.0f*deltaTime);
                     if (glfwGetKey(window,GLFW_KEY_DOWN)==GLFW_PRESS)
@@ -424,6 +426,7 @@ int main(int argc, char** argv) {
             if (edge(GLFW_KEY_F, fWas)) vis.alpha = (AlphaMode)(((int)vis.alpha + 1) % 4);
             if (edge(GLFW_KEY_V, vWas)) vis.pulse = (PulseMode)(((int)vis.pulse + 1) % 3);
             if (edge(GLFW_KEY_T, tWas)) vis.depthAid = (DepthAid)(((int)vis.depthAid + 1) % 3);
+            if (edge(GLFW_KEY_C, cWas)) vis.occlude4D = !vis.occlude4D;  // 4D hidden-surface removal
             vis.time += deltaTime;  // drives pulse + camera sway
 
             // Focal length adjustment (universal).

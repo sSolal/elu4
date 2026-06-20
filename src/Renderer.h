@@ -64,7 +64,8 @@ public:
 
 private:
     // Set the shared inner-shader uniforms (MVP + all depth/alpha/pulse modes).
-    void setupInnerShader(const glm::mat4& innerMVP, const RenderSettings& vis);
+    // focalLength feeds the 4D-occlusion ray reconstruction (uFocal).
+    void setupInnerShader(const glm::mat4& innerMVP, float focalLength, const RenderSettings& vis);
 
     Shader innerShader, wireShader, markerShader;
     GLuint wireEdgeVAO, wireEdgeVBO, wireEdgeEBO;

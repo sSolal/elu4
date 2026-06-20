@@ -12,11 +12,14 @@
 // colour. The floor row also extends an equal length behind the entrance, with
 // no walls, so the player can back out and observe the tube from outside.
 namespace {
-    constexpr float WIDTH  = 2.0f;        // corridor width = cube side length
-    constexpr float H      = WIDTH * 0.5f;// cube half-extent in X/Y/Z
-    constexpr float W_HALF = H;           // cube half-extent in W = H, so segments abut
-                                          //   fully along W (no gap); colour alternation
-                                          //   alone marks the tiling
+    constexpr float WIDTH  = 2.0f;        // corridor width = cube side length (spacing)
+    constexpr float H      = WIDTH * 0.5f;// cube half-extent in X/Y/Z (placement/physics)
+    constexpr float W_HALF = H;           // cube half-extent in W = H (placement)
+    // The drawn/occluder cube is shrunk by GAP so neighbouring segments no longer
+    // share faces. Coincident surfaces make the 4D occlusion test tie ambiguously
+    // (flicker as the camera moves); a hair of empty space resolves it cleanly and
+    // also reads as a seam between segments.
+    constexpr float GAP    = 0.04f;
     constexpr int   N      = 5;           // segments in the corridor (and in the rear floor)
     // Segment centres run -0.5*WIDTH, -1.5*WIDTH, ... into the corridor (negative W
     // is forward), and +0.5*WIDTH, +1.5*WIDTH, ... onto the rear platform.
@@ -48,7 +51,8 @@ CorridorLevel::~CorridorLevel() {
 
 void CorridorLevel::load() {
     // One near-perfect cube, reused for every segment cube via per-instance colour.
-    tileMesh_ = generateBox({H, H, H, W_HALF});
+    // Slightly smaller than the WIDTH spacing so segments have a thin seam (see GAP).
+    tileMesh_ = generateBox({H - GAP, H - GAP, H - GAP, W_HALF - GAP});
     tileBuf_.init(tileMesh_);
 
     // Two-tone palettes; alternation along the corridor makes each cube distinct.

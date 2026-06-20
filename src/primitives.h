@@ -13,6 +13,8 @@
 inline Object4D generateBox(const glm::vec4& half) {
     Object4D box;
     box.name = "Box";
+    box.isBox = true;
+    box.boxHalf = half;
 
     for (int i = 0; i < 16; i++) {
         float x = ((i & 1) ? half.x : -half.x);
@@ -79,6 +81,8 @@ inline Object4D generatePolyline(int pointCount) {
 inline Object4D generateHypercube() {
     Object4D hypercube;
     hypercube.name = "Hypercube";
+    hypercube.isBox = true;
+    hypercube.boxHalf = glm::vec4(0.5f);
 
     // Generate all 16 vertices (2^4 combinations of ±0.5)
     for (int i = 0; i < 16; i++) {
