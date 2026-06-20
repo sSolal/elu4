@@ -1,13 +1,13 @@
 #include "levels/StubLevel.h"
 
 #include "Renderer.h"
-#include "Tesseract.h"
+#include "primitives.h"
 #include "imgui.h"
 
 void StubLevel::load() {
     // One slowly-recognisable marker cube so the viewport isn't empty.
     scene_.push_back({
-        {0.0f, Tesseract::HS, 0.0f, 0.0f},
+        {0.0f, kHyperHalf, 0.0f, 0.0f},
         Math4D::Rotor4D::fromXW(0.6f) * Math4D::Rotor4D::fromXZ(0.4f),
         glm::vec3(0.5f, 0.5f, 0.55f),
         glm::vec3(0.3f, 0.3f, 0.35f)
@@ -20,8 +20,8 @@ void StubLevel::update(const LevelContext& ctx) {
 }
 
 void StubLevel::render(const LevelContext& ctx) {
-    ctx.renderer.drawScene(scene_, ctx.tesseract.buffers, cam4D_, cam4D_.getOrientation(),
-                           focal_, ctx.tesseract, ctx.innerMVP, ctx.vis);
+    ctx.renderer.drawObjects(scene_, ctx.hyperMesh, ctx.hyperBuf, cam4D_, cam4D_.getOrientation(),
+                             focal_, ctx.innerMVP, ctx.vis);
     ctx.renderer.drawOuterCube(ctx.outerMVP);
 }
 

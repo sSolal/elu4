@@ -23,6 +23,9 @@ public:
     void setVec4(const std::string& name, const glm::vec4& value) const;
     // Upload `count` contiguous vec4s to a uniform array (e.g. "uOccCenter").
     void setVec4Array(const std::string& name, const glm::vec4* values, int count) const;
+    // Upload `count` contiguous floats / ints to a uniform array.
+    void setFloatArray(const std::string& name, const float* values, int count) const;
+    void setIntArray(const std::string& name, const int* values, int count) const;
 
 private:
     void checkCompileErrors(unsigned int shader, std::string type);

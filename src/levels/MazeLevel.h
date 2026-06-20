@@ -5,7 +5,7 @@
 #include "Level.h"
 #include "Object4D.h"
 #include "ObjectBuffer.h"
-#include "Renderer.h"   // ObjectInstance (via Level2.h), Instance4D (via Scene.h)
+#include "Renderer.h"   // ObjectInstance (via Scene.h)
 #include "Minimap.h"
 
 // Level 9 - Maze.
@@ -43,7 +43,7 @@ private:
     // --- Static scene instances ---
     std::vector<ObjectInstance> wallInsts_;
     std::vector<ObjectInstance> floorInsts_;
-    std::vector<Instance4D>     goal_;          // bright tesseract marker at the exit
+    std::vector<ObjectInstance> goal_;          // bright hypercube marker at the exit
 
     glm::vec4 goalPos_{0.0f};
     bool      won_ = false;

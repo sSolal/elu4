@@ -24,5 +24,5 @@ public:
 private:
     std::string name_;
     std::string blurb_;
-    std::vector<Instance4D> scene_;
+    std::vector<ObjectInstance> scene_;
 };

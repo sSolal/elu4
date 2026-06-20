@@ -14,7 +14,6 @@ add_executable(game
     src/Shader.cpp
     src/physics.cpp
     src/Camera.cpp
-    src/Tesseract.cpp
     src/Scene.cpp
     src/Level2.cpp
     src/Renderer.cpp

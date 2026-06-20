@@ -9,8 +9,9 @@
 #include "LevelControls.h"
 #include "RenderSettings.h"
 
-class Renderer;   // fwd — defined in Renderer.h
-class Tesseract;  // fwd — defined in Tesseract.h
+class Renderer;       // fwd — defined in Renderer.h
+struct Object4D;      // fwd — defined in Object4D.h
+struct ObjectBuffer;  // fwd — defined in ObjectBuffer.h
 
 // Everything a level needs each frame, supplied by the runner in main.cpp so
 // levels never reach for globals. The runner updates the level first, then
@@ -19,7 +20,8 @@ class Tesseract;  // fwd — defined in Tesseract.h
 struct LevelContext {
     GLFWwindow* window;
     Renderer&   renderer;
-    Tesseract&  tesseract;   // shared hypercube topology + GPU buffers
+    Object4D&     hyperMesh;  // shared hypercube mesh (marker/goal cubes)
+    ObjectBuffer& hyperBuf;   // its GPU buffers
     float       dt;
     bool        insideMode;  // TAB state (3D observer vs 4D FPS), owned by runner
     glm::mat4   projection;

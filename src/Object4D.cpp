@@ -105,6 +105,20 @@ bool Object4D::loadFromJSON(const std::string& filePath) {
         }
     }
 
+    // Build a render triangle list from the parsed cells (fan-triangulate each polygon)
+    // so JSON meshes draw solid on the unified render path. Authored meshes are left
+    // non-occluding (occludes=false, no hull): the convex-hyperplane occluder is only
+    // defined for the engine's generated convex primitives. Such meshes still render
+    // and depth-sort, just without 4D hidden-surface removal — as before.
+    triangleIndices.clear();
+    for (const auto& cell : cells) {
+        for (size_t k = 1; k + 1 < cell.size(); ++k) {
+            triangleIndices.push_back((unsigned int)cell[0]);
+            triangleIndices.push_back((unsigned int)cell[k]);
+            triangleIndices.push_back((unsigned int)cell[k + 1]);
+        }
+    }
+
     return !vertices.empty();
 }
 

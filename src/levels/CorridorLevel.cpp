@@ -1,7 +1,6 @@
 #include "levels/CorridorLevel.h"
 
 #include "Renderer.h"
-#include "Tesseract.h"
 #include "primitives.h"
 #include "imgui.h"
 #include <cmath>
@@ -119,7 +118,7 @@ void CorridorLevel::render(const LevelContext& ctx) {
     ctx.renderer.drawObjects(floorInsts_, tileMesh_, tileBuf_, cam4D_, ori, focal_, ctx.innerMVP, ctx.vis);
     if (showWalls_)
         ctx.renderer.drawObjects(wallInsts_, tileMesh_, tileBuf_, cam4D_, ori, focal_, ctx.innerMVP, ctx.vis);
-    ctx.renderer.drawScene(goal_, ctx.tesseract.buffers, cam4D_, ori, focal_, ctx.tesseract, ctx.innerMVP, ctx.vis);
+    ctx.renderer.drawObjects(goal_, ctx.hyperMesh, ctx.hyperBuf, cam4D_, ori, focal_, ctx.innerMVP, ctx.vis);
     ctx.renderer.drawOuterCube(ctx.outerMVP);
 }
 

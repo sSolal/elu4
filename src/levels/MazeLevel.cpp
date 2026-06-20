@@ -1,7 +1,6 @@
 #include "levels/MazeLevel.h"
 
 #include "Renderer.h"
-#include "Tesseract.h"
 #include "primitives.h"
 #include "imgui.h"
 #include <glm/gtc/matrix_transform.hpp>
@@ -177,7 +176,7 @@ void MazeLevel::render(const LevelContext& ctx) {
         ctx.renderer.drawObjects(floorInsts_, floorMesh_, floorBuf_, cam4D_, ori, focal_, ctx.innerMVP, vis);
     if (!wallInsts_.empty())
         ctx.renderer.drawObjects(wallInsts_, wallMesh_, wallBuf_, cam4D_, ori, focal_, ctx.innerMVP, vis);
-    ctx.renderer.drawScene(goal_, ctx.tesseract.buffers, cam4D_, ori, focal_, ctx.tesseract, ctx.innerMVP, vis);
+    ctx.renderer.drawObjects(goal_, ctx.hyperMesh, ctx.hyperBuf, cam4D_, ori, focal_, ctx.innerMVP, vis);
 
     ctx.renderer.drawOuterCube(ctx.outerMVP);
 

@@ -11,37 +11,46 @@ out vec4 FragColor;
 // solid lies nearer the 4D camera than the fragment along the SAME 4D line of sight
 // (the W projection ray) — i.e. genuinely hidden in 4D, even though we never write a
 // 3D depth buffer (so things merely overlapping in the 3D view still both show).
-#define MAX_OCC 32
-uniform bool  uOcclude;             // master switch (C toggle)
+// Each occluder is a convex 4D solid = the intersection of its facet half-spaces
+// dot(n_i, v - center) <= d_i (n_i an outward unit normal, camera space). A box is
+// the special case of 8 axis-aligned planes; a tetrahedralised mesh contributes one
+// plane per distinct facet. Planes are packed into one flat array, each occluder
+// owning the slice [uOccPlaneOfs[o], uOccPlaneOfs[o]+uOccPlaneCnt[o]).
+#define MAX_OCC    32
+#define MAX_PLANES 512
+uniform bool  uOcclude;                 // master switch (C toggle)
 uniform int   uOccCount;
-uniform int   uSelfIndex;           // occluder slot of the instance being drawn; skipped
-uniform float uFocal;               // W-perspective focal length; 4D eye sits at w=uFocal
-uniform vec4  uOccCenter[MAX_OCC];  // occluder center, 4D camera space
-uniform vec4  uOccAxis[MAX_OCC * 4];// 4 unit slab axes per occluder, 4D camera space
-uniform vec4  uOccHalf[MAX_OCC];    // per-axis half-extents (x,y,z,w)
+uniform int   uSelfIndex;               // occluder slot of the instance being drawn; skipped
+uniform float uFocal;                   // W-perspective focal length; 4D eye sits at w=uFocal
+uniform vec4  uOccCenter[MAX_OCC];      // occluder center, 4D camera space
+uniform int   uOccPlaneOfs[MAX_OCC];    // first plane index for this occluder
+uniform int   uOccPlaneCnt[MAX_OCC];    // plane count for this occluder
+uniform vec4  uOccPlaneN[MAX_PLANES];   // facet outward unit normal, 4D camera space
+uniform float uOccPlaneD[MAX_PLANES];   // facet offset, relative to the occluder center
 
 // The fragment's 4D line of sight is the ray v(t) = (P*(uFocal - t), t) through its
 // 3D image point P (t = camera-space W). Return the W-interval [tlo,thi] in which
-// occluder o's solid covers this ray (tlo>thi ⇒ the ray misses it).
+// occluder o's solid covers this ray (tlo>thi ⇒ the ray misses it). Each half-space
+// dot(n, v(t)-center) <= d is linear in t, so it clips one side of the interval.
 vec2 occInterval(int o, vec3 P) {
-    vec4 c = uOccCenter[o];
-    vec4 h = uOccHalf[o];
+    vec4 c   = uOccCenter[o];
+    int  ofs = uOccPlaneOfs[o];
+    int  cnt = uOccPlaneCnt[o];
     float tlo = -1e30, thi = 1e30;
-    for (int k = 0; k < 4; ++k) {
-        vec4  ax = uOccAxis[o * 4 + k];
-        float Ak = dot(ax.xyz, P);
-        float Bk = dot(ax, c);
-        // axis_k . v(t) - axis_k.c = (Ak*uFocal - Bk) + t*(ax.w - Ak)
-        float pk = Ak * uFocal - Bk;
-        float qk = ax.w - Ak;
-        float hk = h[k];
-        if (abs(qk) < 1e-6) {
-            if (abs(pk) > hk) return vec2(1.0, -1.0);       // ray parallel & outside slab
+    for (int j = 0; j < cnt; ++j) {
+        vec4  n = uOccPlaneN[ofs + j];
+        float d = uOccPlaneD[ofs + j] + dot(n, c);      // shift to an absolute offset
+        // dot(n, v(t)) = dot(n.xyz,P)*uFocal + t*(n.w - dot(n.xyz,P))
+        float A = dot(n.xyz, P);
+        float p = A * uFocal - d;
+        float q = n.w - A;
+        // half-space p + t*q <= 0 clips one end of [tlo,thi]
+        if (abs(q) < 1e-6) {
+            if (p > 0.0) return vec2(1.0, -1.0);        // ray parallel & outside
+        } else if (q > 0.0) {
+            thi = min(thi, -p / q);
         } else {
-            float ta = (-hk - pk) / qk;
-            float tb = ( hk - pk) / qk;
-            tlo = max(tlo, min(ta, tb));
-            thi = min(thi, max(ta, tb));
+            tlo = max(tlo, -p / q);
         }
     }
     return vec2(tlo, thi);

@@ -38,7 +38,7 @@ private:
     std::vector<ObjectInstance> floorInsts_;  // the ground (always shown)
     std::vector<ObjectInstance> wallInsts_;   // ceiling + side walls (H toggles)
 
-    std::vector<Instance4D> goal_;            // the red hypercube goal
+    std::vector<ObjectInstance> goal_;        // the red hypercube goal
     glm::vec4 goalPos_;
     bool      won_           = false;
     bool      nearGoal_      = false;

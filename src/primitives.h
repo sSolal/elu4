@@ -5,17 +5,28 @@
 #include <cmath>
 #include <algorithm>
 
+// The engine's standard hypercube half-extent, used for shared marker/goal cubes
+// (formerly Tesseract::HS). Keeps those markers their historical size.
+constexpr float kHyperHalf = 0.3f;
+
 // A 4D box (hyperrectangle) with independent half-extents per axis. Same
 // topology as the unit hypercube (16 verts, 24 square faces) — only the vertex
 // positions differ. Making a box THIN in one axis gives a flat slab that reads
 // as a wall/floor rather than a chunky hypercube, which is what corridor walls
 // want: the 4D analog of using a thin plane for a wall in 3D.
+// Decompose a 3-cube into 6 tetrahedra (Kuhn subdivision around the main diagonal
+// 0–7). Corner codes are 3-bit (bit a = the a-th free axis); shared by all callers.
+static const int kBoxKuhn[6][4] = {
+    {0, 1, 3, 7}, {0, 3, 2, 7}, {0, 2, 6, 7},
+    {0, 6, 4, 7}, {0, 4, 5, 7}, {0, 5, 1, 7},
+};
+
 inline Object4D generateBox(const glm::vec4& half) {
     Object4D box;
     box.name = "Box";
-    box.isBox = true;
-    box.boxHalf = half;
+    box.occludes = true;
 
+    // 16 vertices: bit k of index i selects +half[k] (1) or -half[k] (0).
     for (int i = 0; i < 16; i++) {
         float x = ((i & 1) ? half.x : -half.x);
         float y = ((i & 2) ? half.y : -half.y);
@@ -32,33 +43,79 @@ inline Object4D generateBox(const glm::vec4& half) {
         }
     }
 
+    // 8 cubic hyperfaces (facets), one per (axis k, sign s): outward normal s·e_k,
+    // offset half[k]; the solid is { x : dot(n,x) <= half[k] }. facet index = k*2 + s.
+    box.hullN.resize(8);
+    box.hullD.resize(8);
+    for (int k = 0; k < 4; k++) {
+        for (int s = 0; s < 2; s++) {
+            glm::vec4 nrm(0.0f);
+            nrm[k] = (s ? 1.0f : -1.0f);
+            box.hullN[k * 2 + s] = nrm;
+            box.hullD[k * 2 + s] = half[k];
+        }
+    }
+
+    // Tetrahedralise each cubic hyperface into 6 tets; all share the facet's normal.
+    for (int k = 0; k < 4; k++) {
+        for (int s = 0; s < 2; s++) {
+            int facet = k * 2 + s;
+            int fa[3], nf = 0;                       // the three free axes (≠ k), ascending
+            for (int a = 0; a < 4; a++) if (a != k) fa[nf++] = a;
+            auto vid = [&](int code) {
+                int idx = s << k;                    // fix axis k at sign s
+                if (code & 1) idx |= 1 << fa[0];
+                if (code & 2) idx |= 1 << fa[1];
+                if (code & 4) idx |= 1 << fa[2];
+                return idx;
+            };
+            for (int t = 0; t < 6; t++) {
+                box.tetrahedra.push_back(glm::ivec4(
+                    vid(kBoxKuhn[t][0]), vid(kBoxKuhn[t][1]),
+                    vid(kBoxKuhn[t][2]), vid(kBoxKuhn[t][3])));
+                box.tetNormal.push_back(box.hullN[facet]);
+                box.tetFace.push_back(facet);
+            }
+        }
+    }
+
     // Cells (square faces): vertices differing in exactly two coordinates.
     for (int i = 0; i < 16; i++) {
         for (int j = i + 1; j < 16; j++) {
-            int diff = i ^ j;
-            if (__builtin_popcount(diff) == 2) {
-                for (int k = 0; k < 16; k++) {
-                    if (k == i || k == j) continue;
-                    if (__builtin_popcount(i ^ k) == 1 && __builtin_popcount(j ^ k) == 1) {
-                        int l = i ^ j ^ k;
-                        if (i < j && i < k && i < l)
-                            box.cells.push_back({i, k, j, l});  // cyclic order
-                        break;
-                    }
+            if (__builtin_popcount(i ^ j) != 2) continue;
+            for (int k = 0; k < 16; k++) {
+                if (k == i || k == j) continue;
+                if (__builtin_popcount(i ^ k) == 1 && __builtin_popcount(j ^ k) == 1) {
+                    int l = i ^ j ^ k;
+                    if (i < j && i < k && i < l)
+                        box.cells.push_back({i, k, j, l});  // cyclic order
+                    break;
                 }
             }
         }
     }
 
+    // Rasterised surface = the square 2-faces, triangulated. Each square is the
+    // intersection of its two fixed-axis facets and is drawn when either faces the eye.
     for (const auto& quad : box.cells) {
-        if (quad.size() == 4) {
-            box.triangleIndices.push_back(quad[0]);
-            box.triangleIndices.push_back(quad[1]);
-            box.triangleIndices.push_back(quad[2]);
-            box.triangleIndices.push_back(quad[0]);
-            box.triangleIndices.push_back(quad[2]);
-            box.triangleIndices.push_back(quad[3]);
+        if (quad.size() != 4) continue;
+        glm::ivec2 facets(-1, -1);
+        int nf = 0;
+        for (int a = 0; a < 4; a++) {
+            int bit = (quad[0] >> a) & 1;
+            bool fixed = true;
+            for (int q = 1; q < 4; q++)
+                if (((quad[q] >> a) & 1) != bit) { fixed = false; break; }
+            if (fixed && nf < 2) facets[nf++] = a * 2 + bit;
         }
+        box.triangleIndices.push_back(quad[0]);
+        box.triangleIndices.push_back(quad[1]);
+        box.triangleIndices.push_back(quad[2]);
+        box.triFace.push_back(facets);
+        box.triangleIndices.push_back(quad[0]);
+        box.triangleIndices.push_back(quad[2]);
+        box.triangleIndices.push_back(quad[3]);
+        box.triFace.push_back(facets);
     }
 
     return box;
@@ -78,157 +135,76 @@ inline Object4D generatePolyline(int pointCount) {
     return line;
 }
 
+// The unit hypercube is just a box with half-extent 0.5 on every axis.
 inline Object4D generateHypercube() {
-    Object4D hypercube;
+    Object4D hypercube = generateBox(glm::vec4(0.5f));
     hypercube.name = "Hypercube";
-    hypercube.isBox = true;
-    hypercube.boxHalf = glm::vec4(0.5f);
-
-    // Generate all 16 vertices (2^4 combinations of ±0.5)
-    for (int i = 0; i < 16; i++) {
-        float x = ((i & 1) ? 0.5f : -0.5f);
-        float y = ((i & 2) ? 0.5f : -0.5f);
-        float z = ((i & 4) ? 0.5f : -0.5f);
-        float w = ((i & 8) ? 0.5f : -0.5f);
-        hypercube.vertices.push_back(glm::vec4(x, y, z, w));
-    }
-
-    // Generate edges - connect vertices that differ in exactly one coordinate
-    for (int i = 0; i < 16; i++) {
-        for (int j = i + 1; j < 16; j++) {
-            int diff = i ^ j;
-            // Check if only one bit differs
-            if ((diff & (diff - 1)) == 0) {
-                hypercube.edges.push_back({i, j});
-            }
-        }
-    }
-
-    // Generate cells (2D faces) - connect vertices that differ in exactly two coordinates
-    for (int i = 0; i < 16; i++) {
-        for (int j = i + 1; j < 16; j++) {
-            int diff = i ^ j;
-            int bitCount = __builtin_popcount(diff);
-            if (bitCount == 2) {
-                // Found a pair, look for the other two vertices of the square
-                for (int k = 0; k < 16; k++) {
-                    if (k == i || k == j) continue;
-                    int d1 = i ^ k;
-                    int d2 = j ^ k;
-                    if (__builtin_popcount(d1) == 1 && __builtin_popcount(d2) == 1) {
-                        int l = i ^ j ^ k;
-                        // Found a square: i, k, j, l (cyclic order - k and l adjacent to i in different dimensions)
-                        if (i < j && i < k && i < l) {
-                            std::vector<int> face = {i, k, j, l};  // Proper cyclic order: i -> k -> j -> l -> i
-                            hypercube.cells.push_back(face);
-                        }
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    // No need to deduplicate - we track with i < j && i < k && i < l to ensure uniqueness
-
-    // Convert quads to triangles (same as game): (v0,v1,v2) + (v0,v2,v3)
-    for (const auto& quad : hypercube.cells) {
-        if (quad.size() == 4) {
-            hypercube.triangleIndices.push_back(quad[0]);
-            hypercube.triangleIndices.push_back(quad[1]);
-            hypercube.triangleIndices.push_back(quad[2]);
-
-            hypercube.triangleIndices.push_back(quad[0]);
-            hypercube.triangleIndices.push_back(quad[2]);
-            hypercube.triangleIndices.push_back(quad[3]);
-        }
-    }
-
     return hypercube;
 }
 
-inline Object4D generateHypersphere() {
-    Object4D hypersphere;
-    hypersphere.name = "Hypersphere";
+// A low-poly hypersphere as the 4D cross-polytope (16-cell): 8 vertices (±radius on
+// each axis) and 16 cells that are EACH a single regular tetrahedron — the cleanest
+// genuine-tetrahedral 4D ball (the 4D analog of approximating a 3D sphere with an
+// octahedron). It is convex, so it occludes like every other solid; its 16 facet
+// hyperplanes are the L1 constraints sum(±x) <= radius. Recognisable and cheap; bump
+// to a 24-/600-cell later if a smoother ball is wanted.
+inline Object4D generateHypersphere(float radius = 0.5f) {
+    Object4D s;
+    s.name = "Hypersphere";
+    s.occludes = true;
 
-    // Generate points on a 3-sphere (unit hypersphere in 4D)
-    // Using proper Hopf coordinates: S^3 -> S^2 x S^1
-    // (w, x, y, z) = (cos(θ)cos(φ), cos(θ)sin(φ)cos(ψ), cos(θ)sin(φ)sin(ψ), sin(θ))
-    int resolution = 5;  // 5x5x5 = 125 vertices
-    float radius = 0.5f;
+    // 8 vertices: vid(axis i, sign bit b) = i*2 + b, at (b? +radius : -radius)·e_i.
+    auto vid = [](int axis, int bit) { return axis * 2 + bit; };
+    s.vertices.resize(8);
+    for (int i = 0; i < 4; ++i)
+        for (int b = 0; b < 2; ++b) {
+            glm::vec4 v(0.0f);
+            v[i] = (b ? radius : -radius);
+            s.vertices[vid(i, b)] = v;
+        }
 
-    int vertexIndex = 0;
-    std::vector<std::vector<std::vector<int>>> grid(resolution, std::vector<std::vector<int>>(resolution, std::vector<int>(resolution)));
+    // Edges: every vertex pair except antipodal (same axis, opposite sign).
+    for (int p = 0; p < 8; ++p)
+        for (int q = p + 1; q < 8; ++q)
+            if (p / 2 != q / 2) s.edges.push_back({p, q});
 
-    for (int i = 0; i < resolution; i++) {
-        for (int j = 0; j < resolution; j++) {
-            for (int k = 0; k < resolution; k++) {
-                float theta = (i / (float)(resolution - 1)) * M_PI - M_PI / 2.0f;  // -π/2 to π/2
-                float phi = (j / (float)(resolution - 1)) * M_PI;                   // 0 to π
-                float psi = (k / (float)(resolution - 1)) * 2.0f * M_PI;            // 0 to 2π
+    // 16 tetrahedral cells (facets), one per sign code c (bit i = sign of axis i). The
+    // cell picks one vertex per axis; its outward normal is the unit sign vector and
+    // the facet plane is dot(n, x) = radius/2 (so the solid is the L1 ball).
+    s.hullN.resize(16);
+    s.hullD.resize(16);
+    for (int c = 0; c < 16; ++c) {
+        glm::vec4 n(0.0f);
+        glm::ivec4 tet;
+        for (int i = 0; i < 4; ++i) {
+            int b = (c >> i) & 1;
+            n[i] = (b ? 0.5f : -0.5f);     // |n| = sqrt(4·0.25) = 1
+            tet[i] = vid(i, b);
+        }
+        s.hullN[c] = n;
+        s.hullD[c] = radius * 0.5f;
+        s.tetrahedra.push_back(tet);
+        s.tetNormal.push_back(n);
+        s.tetFace.push_back(c);
+    }
 
-                float cosTheta = std::cos(theta);
-                float sinTheta = std::sin(theta);
-                float cosPhi = std::cos(phi);
-                float sinPhi = std::sin(phi);
-                float cosPsi = std::cos(psi);
-                float sinPsi = std::sin(psi);
-
-                float w = radius * cosTheta * cosPhi;
-                float x = radius * cosTheta * sinPhi * cosPsi;
-                float y = radius * cosTheta * sinPhi * sinPsi;
-                float z = radius * sinTheta;
-
-                hypersphere.vertices.push_back(glm::vec4(x, y, z, w));
-                grid[i][j][k] = vertexIndex++;
-            }
+    // Rasterised surface = the 32 triangular 2-faces (the 2-skeleton). A 2-face omits
+    // one axis m and fixes a sign on the other three; it is shared by the two cells
+    // that extend it with ±e_m, so it is drawn when either of those faces the eye.
+    for (int m = 0; m < 4; ++m) {
+        int oa[3], n = 0;
+        for (int a = 0; a < 4; ++a) if (a != m) oa[n++] = a;
+        for (int s0 = 0; s0 < 2; ++s0)
+        for (int s1 = 0; s1 < 2; ++s1)
+        for (int s2 = 0; s2 < 2; ++s2) {
+            int base = (s0 << oa[0]) | (s1 << oa[1]) | (s2 << oa[2]);
+            glm::ivec2 facets(base, base | (1 << m));   // axis-m sign 0 and 1
+            s.triangleIndices.push_back(vid(oa[0], s0));
+            s.triangleIndices.push_back(vid(oa[1], s1));
+            s.triangleIndices.push_back(vid(oa[2], s2));
+            s.triFace.push_back(facets);
         }
     }
 
-    // Connect nearby vertices with edges
-    for (int i = 0; i < resolution; i++) {
-        for (int j = 0; j < resolution; j++) {
-            for (int k = 0; k < resolution; k++) {
-                // Connect to next in each dimension
-                if (i < resolution - 1) {
-                    hypersphere.edges.push_back({grid[i][j][k], grid[i + 1][j][k]});
-                }
-                if (j < resolution - 1) {
-                    hypersphere.edges.push_back({grid[i][j][k], grid[i][j + 1][k]});
-                }
-                if (k < resolution - 1) {
-                    hypersphere.edges.push_back({grid[i][j][k], grid[i][j][k + 1]});
-                }
-            }
-        }
-    }
-
-    // Generate cell faces (quads)
-    for (int i = 0; i < resolution - 1; i++) {
-        for (int j = 0; j < resolution - 1; j++) {
-            for (int k = 0; k < resolution - 1; k++) {
-                // XY face
-                hypersphere.cells.push_back({grid[i][j][k], grid[i + 1][j][k], grid[i + 1][j + 1][k], grid[i][j + 1][k]});
-                // XZ face
-                hypersphere.cells.push_back({grid[i][j][k], grid[i + 1][j][k], grid[i + 1][j][k + 1], grid[i][j][k + 1]});
-                // YZ face
-                hypersphere.cells.push_back({grid[i][j][k], grid[i][j + 1][k], grid[i][j + 1][k + 1], grid[i][j][k + 1]});
-            }
-        }
-    }
-
-    // Convert quads to triangles
-    for (const auto& quad : hypersphere.cells) {
-        if (quad.size() == 4) {
-            hypersphere.triangleIndices.push_back(quad[0]);
-            hypersphere.triangleIndices.push_back(quad[1]);
-            hypersphere.triangleIndices.push_back(quad[2]);
-
-            hypersphere.triangleIndices.push_back(quad[0]);
-            hypersphere.triangleIndices.push_back(quad[2]);
-            hypersphere.triangleIndices.push_back(quad[3]);
-        }
-    }
-
-    return hypersphere;
+    return s;
 }

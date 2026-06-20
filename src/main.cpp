@@ -8,7 +8,8 @@
 #include <string>
 #include "GameState.h"
 #include "Menu.h"
-#include "Tesseract.h"
+#include "primitives.h"
+#include "ObjectBuffer.h"
 #include "Renderer.h"
 #include "Level.h"
 #include "LevelRegistry.h"
@@ -150,7 +151,11 @@ int main(int argc, char** argv) {
     // Create game systems
     GameState state = GameState::MENU;
     Menu menu;
-    Tesseract tesseract;
+    // Shared hypercube mesh for marker/goal cubes, on the single tetrahedral render
+    // path. Sized to the historical Tesseract::HS so markers keep their look.
+    Object4D hyperMesh = generateBox(glm::vec4(kHyperHalf));
+    ObjectBuffer hyperBuf;
+    hyperBuf.init(hyperMesh);
     Renderer renderer;
 
     // The active level (null in the menu). Constructed lazily from the registry
@@ -238,7 +243,7 @@ int main(int argc, char** argv) {
                         level->focalLength()=glm::max(0.1f, level->focalLength()-2.0f*deltaTime);
 
                     level->cam3D().oscMode = 0;  // head motion is the parallax in VR — no sway
-                    LevelContext uctx{window, renderer, tesseract, deltaTime, insideMode,
+                    LevelContext uctx{window, renderer, hyperMesh, hyperBuf, deltaTime, insideMode,
                                       glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f), vis};
                     level->update(uctx);
                     vis.time += deltaTime;
@@ -264,7 +269,7 @@ int main(int argc, char** argv) {
                 } else if (level) {
                     // worldHUD=true so levels skip screen-space 3D overlays (the
                     // direction dot) here — those are drawn in 3D per eye below.
-                    LevelContext hctx{window, renderer, tesseract, deltaTime, insideMode,
+                    LevelContext hctx{window, renderer, hyperMesh, hyperBuf, deltaTime, insideMode,
                                       glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f), vis, true};
                     level->renderHUD(hctx);
                     drawLegend(vis);
@@ -312,7 +317,7 @@ int main(int argc, char** argv) {
 
                         if (vrState == GameState::IN_LEVEL && level) {
                             glm::mat4 mvp = eye.proj * eye.view * boxModel;
-                            LevelContext rctx{window, renderer, tesseract, deltaTime,
+                            LevelContext rctx{window, renderer, hyperMesh, hyperBuf, deltaTime,
                                               insideMode, eye.proj, mvp, mvp, vis, true};
                             level->render(rctx);
                             level->renderWorldHUD(rctx);  // 3D markers (e.g. the dot)
@@ -437,7 +442,7 @@ int main(int argc, char** argv) {
 
             // Update first (moves cam3D), then derive the base view, then render
             // once per eye. update() keeps the full-window projection.
-            LevelContext uctx{window, renderer, tesseract, deltaTime, insideMode,
+            LevelContext uctx{window, renderer, hyperMesh, hyperBuf, deltaTime, insideMode,
                               projection, glm::mat4(1.0f), glm::mat4(1.0f), vis};
             level->update(uctx);
 
@@ -451,7 +456,7 @@ int main(int argc, char** argv) {
             // its own viewport + projection + MVP into the shared LevelContext;
             // levels just consume ctx.inner/outerMVP, so none of them change.
             std::vector<EyeView> eyes = buildDesktopEyes(fbW, fbH, baseView, fakeStereo);
-            LevelContext rctx{window, renderer, tesseract, deltaTime, insideMode,
+            LevelContext rctx{window, renderer, hyperMesh, hyperBuf, deltaTime, insideMode,
                               projection, glm::mat4(1.0f), glm::mat4(1.0f), vis};
             for (const EyeView& eye : eyes) {
                 glViewport(eye.x, eye.y, eye.w, eye.h);

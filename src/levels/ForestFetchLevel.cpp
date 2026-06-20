@@ -35,7 +35,7 @@ namespace {
     Object4D scaledMesh(const Object4D& src, float f) {
         Object4D out = src;
         for (auto& v : out.vertices) v *= f;
-        out.boxHalf *= f;  // keep the solid-occluder extents in sync (no-op if !isBox)
+        for (auto& d : out.hullD) d *= f;  // scale occluder facet offsets with the mesh
         return out;
     }
 }
