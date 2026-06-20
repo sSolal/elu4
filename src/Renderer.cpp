@@ -55,7 +55,10 @@ namespace {
     // Occluder budget — must match inner.frag (MAX_OCC, MAX_PLANES). A solid with
     // more facets than kMaxPlanesPerOcc is skipped from the shader occluder set (it
     // still renders and self-culls on the CPU) so one dense mesh can't dominate.
-    constexpr int kMaxOccluders    = 32;
+    // Occluder budget — must match inner.frag (MAX_OCC, MAX_PLANES). A solid with
+    // more facets than kMaxPlanesPerOcc is skipped from the shader occluder set (it
+    // still renders and self-culls on the CPU) so one dense mesh can't dominate.
+    constexpr int kMaxOccluders    = 64;
     constexpr int kMaxPlanes       = 512;
     constexpr int kMaxPlanesPerOcc = 16;
 
@@ -367,7 +370,9 @@ void Renderer::drawObjects(
     const Math4D::Rotor4D& camOrientation,
     float focalLength,
     const glm::mat4& innerMVP,
-    const RenderSettings& vis
+    const RenderSettings& vis,
+    const std::vector<ObjectInstance>* occluders,
+    const Object4D* occluderObj
 ) {
     glDisable(GL_CULL_FACE);
     glDepthMask(GL_FALSE);
@@ -377,11 +382,16 @@ void Renderer::drawObjects(
     const bool borders = (vis.geom == GeomMode::SolidBorders);
     const glm::mat4 camM = camOrientation.toMatrix();
 
-    // 4D hidden-surface removal: only solid (occludes=true) meshes can occlude and
-    // self-cull. Other meshes (polylines) keep drawing in full.
-    const bool occOn = vis.occlude4D && obj.occludes;
+    // 4D hidden-surface removal. Occluders are the drawn instances themselves (self-
+    // occlusion) unless an external occluder set is supplied — then this call's
+    // instances are occluded by THOSE solids and never self-occlude. Only solid
+    // (occludes=true) occluder meshes can occlude; polylines keep drawing in full.
+    const bool external = (occluders != nullptr && occluderObj != nullptr);
+    const Object4D& occObj = external ? *occluderObj : obj;
+    const std::vector<ObjectInstance>& occInsts = external ? *occluders : instances;
+    const bool occOn = vis.occlude4D && occObj.occludes;
     OccUpload occ;
-    if (occOn) occ = buildOccluders(instances, obj.hullN, obj.hullD, cam4D.pos, camM);
+    if (occOn) occ = buildOccluders(occInsts, occObj.hullN, occObj.hullD, cam4D.pos, camM);
     uploadOccluders(innerShader, occ, occOn);
 
     // Painter's order between instances: farthest 4D depth first.
@@ -404,7 +414,9 @@ void Renderer::drawObjects(
         float instA = (vis.pulse == PulseMode::Off) ? 1.0f
                                                     : pulseFactor(vis.pulse, vis.time, seed);
         innerShader.setFloat("uInstAlpha", instA);
-        innerShader.setInt("uSelfIndex", occOn ? occ.slot(i) : -1);
+        // Self-skip only when self-occluding; with an external occluder set the drawn
+        // instance is not in it, so it has no self slot.
+        innerShader.setInt("uSelfIndex", (occOn && !external) ? occ.slot(i) : -1);
 
         if (wire) {
             glLineWidth(lineWidthForDepth(cd, vis, 2.0f, 0.7f));

@@ -36,6 +36,11 @@ private:
     // World position of grid cell (gi,gj,gk): gi->X, gj->Z, gk->W (symmetric); y given.
     glm::vec4 cellWorld(int gi, int gj, int gk, float y) const;
 
+    // Rebuild visWalls_/visFloors_/goalVisible_ from the player's current cell (local
+    // open-cell pocket + straight corridor line-of-sight). Cheap no-op when the player
+    // hasn't changed cell since the last call.
+    void rebuildVisible();
+
     // --- Meshes + GPU buffers ---
     Object4D     wallMesh_, floorMesh_;
     ObjectBuffer wallBuf_,  floorBuf_;
@@ -44,6 +49,24 @@ private:
     std::vector<ObjectInstance> wallInsts_;
     std::vector<ObjectInstance> floorInsts_;
     std::vector<ObjectInstance> goal_;          // bright hypercube marker at the exit
+
+    // --- Visibility culling (PVS) ---
+    // The carved grid is kept past load() and re-read every frame: from the player's
+    // cell we gather only the walls/floors that could be visible (local pocket +
+    // straight corridor line-of-sight). Submitting just that subset keeps the visible
+    // wall count under the renderer's occluder budget, so the 4D occlusion hides
+    // everything behind them — and collapses the per-frame draw/project cost.
+    std::vector<unsigned char> solid_;          // G*G*G: 1=solid, 0=open
+    std::vector<int> wallInstOfCell_;           // cell -> wallInsts_ index, or -1
+    std::vector<int> floorInstOfCell_;          // cell -> floorInsts_ index, or -1
+    int              goalCell_ = -1;            // grid index of the exit cell
+
+    // Per-frame scratch (kept as members so they are cleared, never reallocated).
+    std::vector<ObjectInstance> visWalls_, visFloors_;
+    std::vector<int>            bfsQueue_;       // grid indices (flat BFS queue)
+    std::vector<unsigned char>  bfsVisited_;     // G*G*G: open enqueued / wall added
+    bool                        goalVisible_ = false;
+    int                         lastPlayerCell_ = -1;  // PVS cache key (static maze)
 
     glm::vec4 goalPos_{0.0f};
     bool      won_ = false;
@@ -55,9 +78,10 @@ private:
     glm::vec3 boundsMin_{0.0f}, boundsMax_{0.0f};  // minimap frame, map space
 
     // --- Tunables ---
-    static constexpr int   N      = 5;          // rooms per axis
-    static constexpr int   G      = 2 * N + 1;  // grid dimension (11): odd=rooms, even=walls
+    static constexpr int   N      = 4;          // rooms per axis
+    static constexpr int   G      = 2 * N + 1;  // grid dimension (9): odd=rooms, even=walls
     static constexpr float CELL   = 4.0f;       // block size (passage width)
     static constexpr float RADIUS = 1.0f;       // player half-extent (< CELL/2 => fits)
     static constexpr float ARRIVE_DIST = 3.0f;  // win range at the exit
+    static constexpr int   VIS_DEPTH = 2;       // PVS: local open-cell BFS radius (cells)
 };

@@ -22,6 +22,12 @@ namespace {
         float dx = a.x - b.x, dz = a.z - b.z, dw = a.w - b.w;
         return std::sqrt(dx * dx + dz * dz + dw * dw);
     }
+
+    // The 6 axis-aligned grid steps (±X, ±Z, ±W in grid space). Shared by maze
+    // emission and per-frame visibility gathering.
+    const int kNI[6] = {1, -1, 0, 0, 0, 0};
+    const int kNJ[6] = {0, 0, 1, -1, 0, 0};
+    const int kNK[6] = {0, 0, 0, 0, 1, -1};
 }
 
 glm::vec4 MazeLevel::cellWorld(int gi, int gj, int gk, float y) const {
@@ -59,12 +65,12 @@ void MazeLevel::load() {
     // solid[cell] starts all-true; room cells (odd,odd,odd) are open; carving a
     // connection opens the even wall-cell between two rooms. Fixed seed => identical
     // maze every time.
-    std::vector<unsigned char> solid((size_t)G * G * G, 1);
+    solid_.assign((size_t)G * G * G, 1);
     auto gidx = [](int i, int j, int k) { return ((size_t)i * G + j) * G + k; };
     for (int ri = 0; ri < N; ++ri)
     for (int rj = 0; rj < N; ++rj)
     for (int rk = 0; rk < N; ++rk)
-        solid[gidx(2 * ri + 1, 2 * rj + 1, 2 * rk + 1)] = 0;
+        solid_[gidx(2 * ri + 1, 2 * rj + 1, 2 * rk + 1)] = 0;
 
     unsigned seed = 1337u;
     auto rnd = [&]() {
@@ -95,29 +101,35 @@ void MazeLevel::load() {
         int ni = cur.i + DI[d], nj = cur.j + DJ[d], nk = cur.k + DK[d];
         // Open the wall cell midway between the two rooms (grid coords).
         int wi = (2 * cur.i + 1) + DI[d], wj = (2 * cur.j + 1) + DJ[d], wk = (2 * cur.k + 1) + DK[d];
-        solid[gidx(wi, wj, wk)] = 0;
+        solid_[gidx(wi, wj, wk)] = 0;
         visited[ridx(ni, nj, nk)] = 1;
         stack.push_back({ni, nj, nk});
     }
 
     // --- Emit geometry + colliders from the grid. ---
+    // Cell -> instance reverse maps drive the per-frame visibility cull; -1 = no
+    // instance at that cell (a cell yields at most one wall OR one floor, never both).
+    wallInstOfCell_.assign((size_t)G * G * G, -1);
+    floorInstOfCell_.assign((size_t)G * G * G, -1);
+    bfsVisited_.assign((size_t)G * G * G, 0);
+    bfsQueue_.reserve((size_t)G * G * G);
+
     const Math4D::Rotor4D I = Math4D::Rotor4D::identity();
     auto isOpen = [&](int i, int j, int k) {
         if (i < 0 || i >= G || j < 0 || j >= G || k < 0 || k >= G) return false;  // boundary = solid
-        return solid[gidx(i, j, k)] == 0;
+        return solid_[gidx(i, j, k)] == 0;
     };
-    const int NI[6] = {1, -1, 0, 0, 0, 0};
-    const int NJ[6] = {0, 0, 1, -1, 0, 0};
-    const int NK[6] = {0, 0, 0, 0, 1, -1};
 
     for (int gi = 0; gi < G; ++gi)
     for (int gj = 0; gj < G; ++gj)
     for (int gk = 0; gk < G; ++gk) {
+        size_t cid = gidx(gi, gj, gk);
         if (isOpen(gi, gj, gk)) {
             // Floor tile (top at y=0) + a uniform-cube collider beneath it.
             glm::vec4 fp = cellWorld(gi, gj, gk, -0.15f);
             int parity = (gi + gj + gk) & 1;
             glm::vec3 shade = parity ? FLOOR_A : FLOOR_B;
+            floorInstOfCell_[cid] = (int)floorInsts_.size();
             floorInsts_.push_back({fp, I, shade, shade});
             world_.addObject(cellWorld(gi, gj, gk, -CELL * 0.5f), CELL * 0.5f);
         } else {
@@ -125,23 +137,25 @@ void MazeLevel::load() {
             // fill). Visual cube spans y in [0, CELL]; matching uniform-cube collider.
             bool borders = false;
             for (int d = 0; d < 6; ++d)
-                if (isOpen(gi + NI[d], gj + NJ[d], gk + NK[d])) { borders = true; break; }
+                if (isOpen(gi + kNI[d], gj + kNJ[d], gk + kNK[d])) { borders = true; break; }
             if (!borders) continue;
             glm::vec4 wp = cellWorld(gi, gj, gk, CELL * 0.5f);
             float t = (float)gk / (float)(G - 1);            // W-position -> hue
             glm::vec3 base = glm::mix(WALL_LOW, WALL_HIGH, t);
+            wallInstOfCell_[cid] = (int)wallInsts_.size();
             wallInsts_.push_back({wp, I, base * 0.85f, base * 1.15f});
             world_.addObject(wp, CELL * 0.5f);
         }
     }
 
     // --- Exit marker: a bright tesseract in the far-corner room. ---
+    goalCell_ = (int)gidx(G - 2, G - 2, G - 2);
     goalPos_ = cellWorld(G - 2, G - 2, G - 2, CELL * 0.5f);
     goal_.push_back({goalPos_, Math4D::Rotor4D::fromXW(0.4f),
                      glm::vec3(1.0f, 0.2f, 0.15f), glm::vec3(1.0f, 0.6f, 0.2f)});
 
     // --- Minimap frame bounds (map space; W -> vertical). Frame the open extent. ---
-    const float B = ((G - 2) - (G - 1) * 0.5f) * CELL + CELL * 0.5f;  // 18 for defaults
+    const float B = ((G - 2) - (G - 1) * 0.5f) * CELL + CELL * 0.5f;  // 14 for defaults
     boundsMin_ = glm::vec3(-B, -B, -B);
     boundsMax_ = glm::vec3( B,  B,  B);
 
@@ -164,6 +178,111 @@ void MazeLevel::update(const LevelContext& ctx) {
     }
 }
 
+void MazeLevel::rebuildVisible() {
+    auto gidx   = [](int i, int j, int k) { return ((size_t)i * G + j) * G + k; };
+    auto inGrid = [](int i, int j, int k) {
+        return i >= 0 && i < G && j >= 0 && j < G && k >= 0 && k < G;
+    };
+    auto clampG = [](int v) { return v < 0 ? 0 : (v >= G ? G - 1 : v); };
+
+    // Player's grid cell = inverse of cellWorld (gi->X, gj->Z, gk->W).
+    const float C = (G - 1) * 0.5f;
+    const glm::vec4& p = cam4D_.pos;
+    int pi = clampG((int)std::lround(p.x / CELL + C));
+    int pj = clampG((int)std::lround(p.z / CELL + C));
+    int pk = clampG((int)std::lround(p.w / CELL + C));
+
+    // If we land on a solid cell (boundary rounding), snap to the nearest open
+    // neighbour; if there is none, fail safe by drawing the whole maze.
+    if (solid_[gidx(pi, pj, pk)]) {
+        bool found = false;
+        for (int d = 0; d < 6 && !found; ++d) {
+            int ni = pi + kNI[d], nj = pj + kNJ[d], nk = pk + kNK[d];
+            if (inGrid(ni, nj, nk) && !solid_[gidx(ni, nj, nk)]) {
+                pi = ni; pj = nj; pk = nk; found = true;
+            }
+        }
+        if (!found) {
+            lastPlayerCell_ = -1;
+            visWalls_   = wallInsts_;
+            visFloors_  = floorInsts_;
+            goalVisible_ = true;
+            return;
+        }
+    }
+
+    int startCell = (int)gidx(pi, pj, pk);
+    if (startCell == lastPlayerCell_) return;   // cache: same cell -> same visible set
+    lastPlayerCell_ = startCell;
+
+    std::fill(bfsVisited_.begin(), bfsVisited_.end(), (unsigned char)0);
+    visWalls_.clear();
+    visFloors_.clear();
+    bfsQueue_.clear();
+    goalVisible_ = false;
+
+    // A solid cell's wall is added at most once (bfsVisited_ doubles as the wall-added
+    // mark — solid cells never enter the open-cell queue, so the bit is free to reuse).
+    auto addWall = [&](int cell) {
+        if (bfsVisited_[cell]) return;
+        bfsVisited_[cell] = 1;
+        int wi = wallInstOfCell_[cell];
+        if (wi >= 0) visWalls_.push_back(wallInsts_[wi]);
+    };
+    // An open cell contributes its floor tile (and flags the goal if it lives there)
+    // plus every solid neighbour as a bordering wall.
+    auto addOpen = [&](int cell, int ci, int cj, int ck) {
+        int fi = floorInstOfCell_[cell];
+        if (fi >= 0) visFloors_.push_back(floorInsts_[fi]);
+        if (cell == goalCell_) goalVisible_ = true;
+        for (int d = 0; d < 6; ++d) {
+            int ni = ci + kNI[d], nj = cj + kNJ[d], nk = ck + kNK[d];
+            if (inGrid(ni, nj, nk) && solid_[gidx(ni, nj, nk)]) addWall((int)gidx(ni, nj, nk));
+        }
+    };
+
+    // Local pocket: level-synchronous BFS through open cells out to VIS_DEPTH.
+    bfsQueue_.push_back(startCell);
+    bfsVisited_[startCell] = 1;
+    addOpen(startCell, pi, pj, pk);
+    size_t levelEnd = bfsQueue_.size();
+    int depth = 0;
+    for (size_t head = 0; head < bfsQueue_.size(); ++head) {
+        if (head == levelEnd) { ++depth; levelEnd = bfsQueue_.size(); }
+        int cell = bfsQueue_[head];
+        int ci = cell / (G * G), cj = (cell / G) % G, ck = cell % G;
+        if (depth >= VIS_DEPTH) continue;       // explored far enough; walls already added
+        for (int d = 0; d < 6; ++d) {
+            int ni = ci + kNI[d], nj = cj + kNJ[d], nk = ck + kNK[d];
+            if (!inGrid(ni, nj, nk)) continue;
+            int ncell = (int)gidx(ni, nj, nk);
+            if (!solid_[ncell] && !bfsVisited_[ncell]) {
+                bfsVisited_[ncell] = 1;
+                addOpen(ncell, ni, nj, nk);
+                bfsQueue_.push_back(ncell);
+            }
+        }
+    }
+
+    // Corridor line-of-sight: from the player cell, march straight down each axis
+    // through open cells until a wall, revealing long straight halls (and their
+    // capping wall) that the bounded local pocket would clip.
+    for (int d = 0; d < 6; ++d) {
+        int ci = pi, cj = pj, ck = pk;
+        while (true) {
+            int ni = ci + kNI[d], nj = cj + kNJ[d], nk = ck + kNK[d];
+            if (!inGrid(ni, nj, nk)) break;
+            int ncell = (int)gidx(ni, nj, nk);
+            if (solid_[ncell]) { addWall(ncell); break; }   // wall capping the corridor
+            if (!bfsVisited_[ncell]) {                       // first visit: floor + side walls
+                bfsVisited_[ncell] = 1;
+                addOpen(ncell, ni, nj, nk);
+            }
+            ci = ni; cj = nj; ck = nk;
+        }
+    }
+}
+
 void MazeLevel::render(const LevelContext& ctx) {
     const Math4D::Rotor4D ori = cam4D_.getOrientation();
 
@@ -172,11 +291,20 @@ void MazeLevel::render(const LevelContext& ctx) {
     vis.depthFar    = std::max(vis.depthFar, 90.0f);
     vis.fogStrength = std::min(vis.fogStrength, 0.40f);
 
-    if (!floorInsts_.empty())
-        ctx.renderer.drawObjects(floorInsts_, floorMesh_, floorBuf_, cam4D_, ori, focal_, ctx.innerMVP, vis);
-    if (!wallInsts_.empty())
-        ctx.renderer.drawObjects(wallInsts_, wallMesh_, wallBuf_, cam4D_, ori, focal_, ctx.innerMVP, vis);
-    ctx.renderer.drawObjects(goal_, ctx.hyperMesh, ctx.hyperBuf, cam4D_, ori, focal_, ctx.innerMVP, vis);
+    // Visibility cull: gather only the walls/floors reachable by sight from the
+    // player's cell, so the 4D occlusion (capped occluder budget) covers them all and
+    // hides everything behind. Floor and goal are occluded by the visible WALL set so
+    // they don't show through walls (occluders are otherwise per-draw-call).
+    rebuildVisible();
+
+    if (!visFloors_.empty())
+        ctx.renderer.drawObjects(visFloors_, floorMesh_, floorBuf_, cam4D_, ori, focal_, ctx.innerMVP, vis,
+                                 &visWalls_, &wallMesh_);
+    if (!visWalls_.empty())
+        ctx.renderer.drawObjects(visWalls_, wallMesh_, wallBuf_, cam4D_, ori, focal_, ctx.innerMVP, vis);
+    if (goalVisible_)
+        ctx.renderer.drawObjects(goal_, ctx.hyperMesh, ctx.hyperBuf, cam4D_, ori, focal_, ctx.innerMVP, vis,
+                                 &visWalls_, &wallMesh_);
 
     ctx.renderer.drawOuterCube(ctx.outerMVP);
 

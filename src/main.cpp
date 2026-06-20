@@ -47,7 +47,7 @@ static void drawLegend(const RenderSettings& vis) {
     ImGui::Text("F  Alpha:    %s", kAlpha[(int)vis.alpha]);
     ImGui::Text("V  X-ray pulse: %s", kPulse[(int)vis.pulse]);
     ImGui::Text("T  Depth aid: %s", kAid[(int)vis.depthAid]);
-    ImGui::Text("C  4D occlude: %s", vis.occlude4D ? "On" : "Off");
+    ImGui::Text("X  4D occlude: %s", vis.occlude4D ? "On" : "Off");
     ImGui::End();
 }
 
@@ -175,7 +175,7 @@ int main(int argc, char** argv) {
     // Global visualization toggles (P/M/N/B/F/V/G), with per-key edge-detection.
     RenderSettings vis;
     bool pWas = false, mWas = false, nWas = false, bWas = false,
-         fWas = false, vWas = false, tWas = false, cWas = false;
+         fWas = false, vWas = false, tWas = false, xWas = false;
 
     float deltaTime = 0.0f;
     float lastFrame = 0.0f;
@@ -201,7 +201,7 @@ int main(int argc, char** argv) {
 
             // Edge-detect helper + per-key state (mirrors the desktop hotkeys).
             bool escWas = false, tabWas = false, backWas = false;
-            bool pW=false,mW=false,nW=false,bW=false,fW=false,vW=false,tW=false,cW=false;
+            bool pW=false,mW=false,nW=false,bW=false,fW=false,vW=false,tW=false,xW=false;
             auto edge = [&](int key, bool& was) {
                 bool now = glfwGetKey(window, key) == GLFW_PRESS;
                 bool fired = now && !was; was = now; return fired;
@@ -240,7 +240,7 @@ int main(int argc, char** argv) {
                     if (edge(GLFW_KEY_F,fW)) vis.alpha=(AlphaMode)(((int)vis.alpha+1)%4);
                     if (edge(GLFW_KEY_V,vW)) vis.pulse=(PulseMode)(((int)vis.pulse+1)%3);
                     if (edge(GLFW_KEY_T,tW)) vis.depthAid=(DepthAid)(((int)vis.depthAid+1)%3);
-                    if (edge(GLFW_KEY_C,cW)) vis.occlude4D = !vis.occlude4D;
+                    if (edge(GLFW_KEY_X,xW)) vis.occlude4D = !vis.occlude4D;
                     if (glfwGetKey(window,GLFW_KEY_UP)==GLFW_PRESS)
                         level->focalLength()=glm::min(10.0f, level->focalLength()+2.0f*deltaTime);
                     if (glfwGetKey(window,GLFW_KEY_DOWN)==GLFW_PRESS)
@@ -369,6 +369,13 @@ int main(int argc, char** argv) {
     const bool  fpsLog         = getenv("FPS_LOG") != nullptr;
     double fpsAccum = 0.0; int fpsFrames = 0;
 
+    // SCREENSHOT=<path> : after SHOT_FRAME frames (default 90, to let the level settle)
+    //                     dump the framebuffer to a binary PPM and quit. Headless-ish
+    //                     capture for verifying a frame; PPM needs no image library.
+    const char* shotPath  = getenv("SCREENSHOT");
+    const int   shotFrame = getenv("SHOT_FRAME") ? atoi(getenv("SHOT_FRAME")) : 90;
+    long long   frameNo   = 0;
+
     // Main game loop
     while (!glfwWindowShouldClose(window)) {
         float currentFrame = (float)glfwGetTime();
@@ -468,7 +475,7 @@ int main(int argc, char** argv) {
             if (edge(GLFW_KEY_F, fWas)) vis.alpha = (AlphaMode)(((int)vis.alpha + 1) % 4);
             if (edge(GLFW_KEY_V, vWas)) vis.pulse = (PulseMode)(((int)vis.pulse + 1) % 3);
             if (edge(GLFW_KEY_T, tWas)) vis.depthAid = (DepthAid)(((int)vis.depthAid + 1) % 3);
-            if (edge(GLFW_KEY_C, cWas)) vis.occlude4D = !vis.occlude4D;  // 4D hidden-surface removal
+            if (edge(GLFW_KEY_X, xWas)) vis.occlude4D = !vis.occlude4D;  // 4D hidden-surface removal
             vis.time += deltaTime;  // drives pulse + camera sway
 
             // Focal length adjustment (universal).
@@ -518,6 +525,23 @@ int main(int argc, char** argv) {
         // Render ImGui
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+        // Optional one-shot frame capture (binary PPM, vertically flipped since GL
+        // reads bottom-up). Fires once then asks the loop to exit.
+        if (shotPath && ++frameNo == shotFrame) {
+            std::vector<unsigned char> px((size_t)fbW * fbH * 3);
+            glPixelStorei(GL_PACK_ALIGNMENT, 1);
+            glReadPixels(0, 0, fbW, fbH, GL_RGB, GL_UNSIGNED_BYTE, px.data());
+            if (FILE* f = fopen(shotPath, "wb")) {
+                fprintf(f, "P6\n%d %d\n255\n", fbW, fbH);
+                for (int y = fbH - 1; y >= 0; --y)
+                    fwrite(px.data() + (size_t)y * fbW * 3, 1, (size_t)fbW * 3, f);
+                fclose(f);
+                std::cout << "Wrote screenshot " << shotPath
+                          << " (" << fbW << "x" << fbH << ")" << std::endl;
+            }
+            glfwSetWindowShouldClose(window, true);
+        }
 
         glfwSwapBuffers(window);
         glfwPollEvents();

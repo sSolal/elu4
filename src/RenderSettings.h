@@ -24,7 +24,7 @@ struct RenderSettings {
     AlphaMode alpha = AlphaMode::Mid;
     PulseMode pulse = PulseMode::Off;
     DepthAid  depthAid = DepthAid::None;        // T: vignette / face-shadow cues
-    bool      occlude4D = true;                 // C: per-fragment 4D hidden-surface removal
+    bool      occlude4D = true;                 // X: per-fragment 4D hidden-surface removal
     int       bg    = 0;                        // default: warm off-white
 
     float time = 0.0f;            // accumulated seconds (pulse + camera sway)

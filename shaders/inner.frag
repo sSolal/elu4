@@ -16,9 +16,9 @@ out vec4 FragColor;
 // the special case of 8 axis-aligned planes; a tetrahedralised mesh contributes one
 // plane per distinct facet. Planes are packed into one flat array, each occluder
 // owning the slice [uOccPlaneOfs[o], uOccPlaneOfs[o]+uOccPlaneCnt[o]).
-#define MAX_OCC    32
+#define MAX_OCC    64
 #define MAX_PLANES 512
-uniform bool  uOcclude;                 // master switch (C toggle)
+uniform bool  uOcclude;                 // master switch (X toggle)
 uniform int   uOccCount;
 uniform int   uSelfIndex;               // occluder slot of the instance being drawn; skipped
 uniform float uFocal;                   // W-perspective focal length; 4D eye sits at w=uFocal

@@ -16,6 +16,12 @@ public:
     Renderer();
     ~Renderer();
 
+    // Draw all `instances` of one mesh with 4D hidden-surface removal. By default the
+    // occluder set is built from `instances` themselves (each occludes the others).
+    // Pass `occluders` + `occluderObj` to instead be occluded by a DIFFERENT instance
+    // set (e.g. draw the floor/goal occluded by the maze walls); the drawn instances
+    // are then not self-occluders. Both nullptr (the default) = self-occlusion, so
+    // existing callers are unaffected.
     void drawObjects(
         const std::vector<ObjectInstance>& instances,
         const Object4D& obj,
@@ -24,7 +30,9 @@ public:
         const Math4D::Rotor4D& camOrientation,
         float focalLength,
         const glm::mat4& innerMVP,
-        const RenderSettings& vis
+        const RenderSettings& vis,
+        const std::vector<ObjectInstance>* occluders = nullptr,
+        const Object4D* occluderObj = nullptr
     );
 
     // Draw a polyline mesh (vertices already in world space) as connected line
