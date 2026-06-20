@@ -3,6 +3,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
+#include <cstdlib>
+#include <cstdio>
 #include <memory>
 #include <vector>
 #include <string>
@@ -118,7 +120,9 @@ int main(int argc, char** argv) {
     }
 
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(1);
+    // Vsync on by default; NO_VSYNC=1 uncaps the framerate (dev: measure true
+    // per-frame cost / headroom instead of being pinned to the refresh rate).
+    glfwSwapInterval(getenv("NO_VSYNC") ? 0 : 1);
 
     // Init GLEW
     glewExperimental = GL_TRUE;
@@ -354,11 +358,44 @@ int main(int argc, char** argv) {
                      "(configure with -DBUILD_VR=ON).\n";
 #endif
 
+    // --- Dev helpers (env-driven, harmless when unset) ------------------------
+    // START_LEVEL=<n>  : skip the menu and boot straight into level n (1-based,
+    //                    matching the menu numbering). Useful for iterating on one
+    //                    level without clicking through the menu each launch.
+    // FPS_LOG=1        : also print the running FPS to stdout once per second.
+    // The window title always shows the live FPS (updated once per second).
+    const char* startLevelEnv = getenv("START_LEVEL");
+    const int   startLevel     = startLevelEnv ? atoi(startLevelEnv) : 0;  // 1-based; 0 = menu
+    const bool  fpsLog         = getenv("FPS_LOG") != nullptr;
+    double fpsAccum = 0.0; int fpsFrames = 0;
+
     // Main game loop
     while (!glfwWindowShouldClose(window)) {
         float currentFrame = (float)glfwGetTime();
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
+
+        // Auto-enter a level on the first menu frame when START_LEVEL is set.
+        if (startLevel > 0 && state == GameState::MENU &&
+            startLevel <= (int)levelRegistry().size()) {
+            level = levelRegistry()[startLevel - 1].factory();
+            level->load();
+            insideMode = true;
+            state = GameState::IN_LEVEL;
+            std::cout << "Entered level: " << level->name() << std::endl;
+        }
+
+        // Live FPS readout: window title, plus optional stdout log.
+        fpsAccum += deltaTime; ++fpsFrames;
+        if (fpsAccum >= 1.0) {
+            double fps = fpsFrames / fpsAccum;
+            char title[128];
+            snprintf(title, sizeof(title), "4D Game  -  %.0f FPS (%.1f ms)",
+                     fps, 1000.0 * fpsAccum / fpsFrames);
+            glfwSetWindowTitle(window, title);
+            if (fpsLog) std::cout << title << std::endl;
+            fpsAccum = 0.0; fpsFrames = 0;
+        }
 
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             glfwSetWindowShouldClose(window, true);

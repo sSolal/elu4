@@ -31,6 +31,13 @@ struct Object4D {
     std::vector<unsigned int> triangleIndices;
     std::vector<glm::ivec2>   triFace;
 
+    // --- Optional per-vertex colours ---------------------------------------------
+    // When non-empty (one entry per vertex), projectObjectInstance uses these
+    // instead of the instance's colorA/colorB W-gradient. Lets a single mesh carry
+    // a baked colour field (e.g. terrain tinted by height) that the two-tone
+    // instance model can't express. Size must equal vertices.size() when used.
+    std::vector<glm::vec3> vertexColors;
+
     // --- 4D occlusion -------------------------------------------------------------
     // The object is the convex solid { x : dot(hullN[i], x) <= hullD[i] } (outward
     // unit normals, local space). The renderer feeds these hyperplanes to the shader

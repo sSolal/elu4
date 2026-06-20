@@ -27,17 +27,24 @@ bool projectObjectInstance(
     outVertData.clear();
     outVertData.reserve(obj.vertices.size() * 7);
 
-    for (const auto& v : obj.vertices) {
+    const bool perVertexColor = obj.vertexColors.size() == obj.vertices.size();
+    for (size_t vi = 0; vi < obj.vertices.size(); ++vi) {
+        const glm::vec4& v = obj.vertices[vi];
         glm::vec4 rv = objM * v;
         rv += inst.pos - camPos;
         rv = camM * rv;
 
         glm::vec3 p = Math4D::project4Dto3D(rv.x, rv.y, rv.z, rv.w, focalLength);
 
-        float t = (v.w + 0.5f);
-        if (t < 0.0f) t = 0.0f;
-        if (t > 1.0f) t = 1.0f;
-        glm::vec3 c = glm::mix(inst.colorA, inst.colorB, t);
+        glm::vec3 c;
+        if (perVertexColor) {
+            c = obj.vertexColors[vi];   // baked colour field (e.g. terrain by height)
+        } else {
+            float t = (v.w + 0.5f);
+            if (t < 0.0f) t = 0.0f;
+            if (t > 1.0f) t = 1.0f;
+            c = glm::mix(inst.colorA, inst.colorB, t);
+        }
 
         outVertData.push_back(p.x);
         outVertData.push_back(p.y);

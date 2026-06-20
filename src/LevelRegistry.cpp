@@ -9,7 +9,7 @@
 #include "levels/PlaneLevel4D.h"
 #include "levels/ForestFetchLevel.h"
 #include "levels/MazeLevel.h"
-#include "levels/StubLevel.h"
+#include "levels/BigVistaLevel.h"
 
 const std::vector<LevelEntry>& levelRegistry() {
     // Built once on first call. Index 0 is the fully-playable Corridor; the rest
@@ -23,12 +23,6 @@ const std::vector<LevelEntry>& levelRegistry() {
 
         r.push_back({"2 - Dodgeball", true,
             [] { return std::unique_ptr<Level>(new DodgeballLevel()); }});
-
-        auto stub = [&r](const char* name, const char* blurb) {
-            std::string n = name, b = blurb;
-            r.push_back({n, false,
-                [n, b] { return std::unique_ptr<Level>(new StubLevel(n, b)); }});
-        };
 
         r.push_back({"3 - Turn & Face", true,
             [] { return std::unique_ptr<Level>(new TurnAndFaceLevel()); }});
@@ -52,7 +46,8 @@ const std::vector<LevelEntry>& levelRegistry() {
         r.push_back({"9 - Maze", true,
             [] { return std::unique_ptr<Level>(new MazeLevel()); }});
 
-        stub("10 - Big Vista",       "Read distance: near and far detail in one large scene.");
+        r.push_back({"10 - Big Vista", true,
+            [] { return std::unique_ptr<Level>(new BigVistaLevel()); }});
 
         return r;
     }();
