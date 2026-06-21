@@ -25,7 +25,9 @@
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 
-// Small always-on overlay listing every visualization toggle and its current state.
+// Small read-only legend listing every visualization toggle and its state. The
+// desktop path uses the interactive drawSettings() overlay instead; this remains
+// for the VR panel, which has no mouse to drive the overlay.
 static void drawLegend(const RenderSettings& vis) {
     static const char* kGeom[]  = {"Solid", "Wireframe", "Solid + borders"};
     static const char* kOsc[]   = {"Static", "Horizontal", "Circle", "Random"};
@@ -48,6 +50,81 @@ static void drawLegend(const RenderSettings& vis) {
     ImGui::Text("V  X-ray pulse: %s", kPulse[(int)vis.pulse]);
     ImGui::Text("T  Depth aid: %s", kAid[(int)vis.depthAid]);
     ImGui::Text("X  4D occlude: %s", vis.occlude4D ? "On" : "Off");
+    ImGui::End();
+}
+
+// One row of a "tri-selector": `count` buttons side by side, the active one
+// highlighted. Returns true and writes the picked index into `value` on a click.
+static bool segmented(const char* id, const char* const* opts, int count, int& value) {
+    bool changed = false;
+    ImGui::PushID(id);
+    for (int i = 0; i < count; ++i) {
+        if (i > 0) ImGui::SameLine();
+        const bool active = (i == value);
+        if (active) {
+            ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.26f, 0.59f, 0.98f, 1.00f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.26f, 0.59f, 0.98f, 1.00f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.26f, 0.59f, 0.98f, 1.00f));
+        }
+        ImGui::PushID(i);
+        if (ImGui::Button(opts[i])) { value = i; changed = true; }
+        ImGui::PopID();
+        if (active) ImGui::PopStyleColor(3);
+    }
+    ImGui::PopID();
+    return changed;
+}
+
+// Settings overlay: visual controls for every visualization setting, each labelled
+// with its Ctrl+key shortcut. Opened from the in-level Settings button; `open` is
+// cleared when the player presses Close. Replaces the old bottom-left legend.
+static void drawSettings(RenderSettings& vis, bool& open) {
+    static const char* kGeom[]  = {"Solid", "Wireframe", "Solid + borders"};
+    static const char* kOsc[]   = {"Static", "Horizontal", "Circle", "Random"};
+    static const char* kDepth[] = {"Fog (near vivid)", "Normal", "Darken far"};
+    static const char* kAlpha[] = {"Mid 0.35", "Light 0.2", "Heavy 0.85", "Near-transparent"};
+    static const char* kBg[]    = {"Warm white", "Deep blue", "Black"};
+    static const char* kPulse[] = {"Off", "Sine (slow)", "Noise"};
+    static const char* kAid[]   = {"None", "Vignette", "Reflection"};
+
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(560, 0), ImGuiCond_Always);
+    ImGui::Begin("Settings", nullptr,
+                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
+
+    ImGui::Text("Settings");
+    ImGui::TextDisabled("Shortcuts: hold Ctrl and press the key shown.");
+    ImGui::Separator();
+
+    // Each row: a left-aligned name in a fixed column, the control, then the
+    // Ctrl+key shortcut right-aligned at the window edge.
+    auto label = [](const char* name) {
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(name);
+        ImGui::SameLine();
+        ImGui::SetCursorPosX(110.0f);
+    };
+    auto shortcut = [](const char* keys) {
+        ImGui::SameLine();
+        const float x = ImGui::GetWindowWidth() - ImGui::CalcTextSize(keys).x - 16.0f;
+        if (x > ImGui::GetCursorPosX()) ImGui::SetCursorPosX(x);
+        ImGui::TextDisabled("%s", keys);
+    };
+
+    int v;
+    label("Geometry");    v = (int)vis.geom;     if (segmented("geom",  kGeom,  3, v)) vis.geom     = (GeomMode)v;  shortcut("Ctrl+P");
+    label("Cam sway");    v = (int)vis.osc;      if (segmented("osc",   kOsc,   4, v)) vis.osc      = (CamOsc)v;    shortcut("Ctrl+M");
+    label("Depth cue");   v = (int)vis.depth;    if (segmented("depth", kDepth, 3, v)) vis.depth    = (DepthCue)v;  shortcut("Ctrl+N");
+    label("Background");  v = vis.bg;            if (segmented("bg",    kBg,    3, v)) vis.bg       = v;            shortcut("Ctrl+B");
+    label("Alpha");       v = (int)vis.alpha;    if (segmented("alpha", kAlpha, 4, v)) vis.alpha    = (AlphaMode)v; shortcut("Ctrl+F");
+    label("X-ray pulse"); v = (int)vis.pulse;    if (segmented("pulse", kPulse, 3, v)) vis.pulse    = (PulseMode)v; shortcut("Ctrl+V");
+    label("Depth aid");   v = (int)vis.depthAid; if (segmented("aid",   kAid,   3, v)) vis.depthAid = (DepthAid)v;  shortcut("Ctrl+T");
+    label("4D occlude");  ImGui::Checkbox("##occlude", &vis.occlude4D);                                             shortcut("Ctrl+X");
+
+    ImGui::Separator();
+    if (ImGui::Button("Close", ImVec2(100, 32)))
+        open = false;
+
     ImGui::End();
 }
 
@@ -165,8 +242,9 @@ int main(int argc, char** argv) {
     // The active level (null in the menu). Constructed lazily from the registry
     // when the player picks a level; reset() on Back / win frees its resources.
     std::unique_ptr<Level> level;
-    bool insideMode = false;     // TAB: 3D observer vs 4D FPS
+    bool insideMode = true;      // TAB: 3D observer vs 4D FPS — default to 4D FPS
     bool tabWasPressed = false;
+    bool settingsOpen = false;   // in-level Settings overlay; freezes gameplay input
 
     // F11 toggles fullscreen; remember the windowed placement so we can restore it.
     bool f11Was = false;
@@ -450,45 +528,60 @@ int main(int argc, char** argv) {
             if (sel >= 0) {
                 level = levelRegistry()[sel].factory();
                 level->load();
-                insideMode = false;
+                insideMode = true;   // default to 4D FPS view; TAB drops to 3D observer
+                settingsOpen = false;
                 state = GameState::IN_LEVEL;
                 std::cout << "Entered level: " << level->name() << std::endl;
             }
         }
         else if (state == GameState::IN_LEVEL && level) {
-            // TAB toggles 3D observer vs 4D FPS (universal across levels).
-            bool tabNow = glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS;
-            if (tabNow && !tabWasPressed) insideMode = !insideMode;
-            tabWasPressed = tabNow;
-
-            // Visualization toggles (edge-detected): cycle/flip on each press.
+            // Edge detector reused for TAB and the Ctrl+key visualization toggles.
             auto edge = [&](int key, bool& was) {
                 bool now = glfwGetKey(window, key) == GLFW_PRESS;
                 bool fired = now && !was;
                 was = now;
                 return fired;
             };
-            if (edge(GLFW_KEY_P, pWas)) vis.geom  = (GeomMode)(((int)vis.geom + 1) % 3);
-            if (edge(GLFW_KEY_M, mWas)) vis.osc   = (CamOsc)(((int)vis.osc + 1) % 4);
-            if (edge(GLFW_KEY_N, nWas)) vis.depth = (DepthCue)(((int)vis.depth + 1) % 3);
-            if (edge(GLFW_KEY_B, bWas)) vis.bg    = (vis.bg + 1) % 3;
-            if (edge(GLFW_KEY_F, fWas)) vis.alpha = (AlphaMode)(((int)vis.alpha + 1) % 4);
-            if (edge(GLFW_KEY_V, vWas)) vis.pulse = (PulseMode)(((int)vis.pulse + 1) % 3);
-            if (edge(GLFW_KEY_T, tWas)) vis.depthAid = (DepthAid)(((int)vis.depthAid + 1) % 3);
-            if (edge(GLFW_KEY_X, xWas)) vis.occlude4D = !vis.occlude4D;  // 4D hidden-surface removal
-            vis.time += deltaTime;  // drives pulse + camera sway
 
-            // Focal length adjustment (universal).
-            if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
-                level->focalLength() = glm::min(10.0f, level->focalLength() + 2.0f * deltaTime);
-            if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
-                level->focalLength() = glm::max(0.1f, level->focalLength() - 2.0f * deltaTime);
-
-            // Update first (moves cam3D), then derive the base view, then render
-            // once per eye. update() keeps the full-window projection.
+            // Build the per-eye render context up front so it's available whether or
+            // not gameplay input ran this frame (it's frozen while Settings is open).
             LevelContext uctx{window, renderer, hyperMesh, hyperBuf, deltaTime, insideMode,
                               projection, glm::mat4(1.0f), glm::mat4(1.0f), vis};
-            level->update(uctx);
+
+            // All gameplay input is suppressed while the Settings overlay is open, so
+            // clicking/adjusting it doesn't move the camera. The scene still renders.
+            if (!settingsOpen) {
+                // TAB toggles 3D observer vs 4D FPS (universal across levels).
+                if (edge(GLFW_KEY_TAB, tabWasPressed)) insideMode = !insideMode;
+
+                // Visualization toggles, now bound to Ctrl+key. Evaluate each edge
+                // first (so the per-key state always tracks the raw key), then gate
+                // the action on Ctrl being held.
+                bool ctrl = glfwGetKey(window, GLFW_KEY_LEFT_CONTROL)  == GLFW_PRESS ||
+                            glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
+                bool pF = edge(GLFW_KEY_P, pWas), mF = edge(GLFW_KEY_M, mWas);
+                bool nF = edge(GLFW_KEY_N, nWas), bF = edge(GLFW_KEY_B, bWas);
+                bool fF = edge(GLFW_KEY_F, fWas), vF = edge(GLFW_KEY_V, vWas);
+                bool tF = edge(GLFW_KEY_T, tWas), xF = edge(GLFW_KEY_X, xWas);
+                if (ctrl && pF) vis.geom     = (GeomMode)(((int)vis.geom + 1) % 3);
+                if (ctrl && mF) vis.osc      = (CamOsc)(((int)vis.osc + 1) % 4);
+                if (ctrl && nF) vis.depth    = (DepthCue)(((int)vis.depth + 1) % 3);
+                if (ctrl && bF) vis.bg       = (vis.bg + 1) % 3;
+                if (ctrl && fF) vis.alpha    = (AlphaMode)(((int)vis.alpha + 1) % 4);
+                if (ctrl && vF) vis.pulse    = (PulseMode)(((int)vis.pulse + 1) % 3);
+                if (ctrl && tF) vis.depthAid = (DepthAid)(((int)vis.depthAid + 1) % 3);
+                if (ctrl && xF) vis.occlude4D = !vis.occlude4D;  // 4D hidden-surface removal
+
+                // Focal length adjustment (universal).
+                if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
+                    level->focalLength() = glm::min(10.0f, level->focalLength() + 2.0f * deltaTime);
+                if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
+                    level->focalLength() = glm::max(0.1f, level->focalLength() - 2.0f * deltaTime);
+
+                // Update first (moves cam3D), then derive the base view, then render.
+                level->update(uctx);
+            }
+            vis.time += deltaTime;  // drives pulse + camera sway (keeps animating when frozen)
 
             // The observer camera sways per the M toggle (parallax depth cue).
             level->cam3D().oscMode = (int)vis.osc;
@@ -511,13 +604,16 @@ int main(int argc, char** argv) {
                 level->render(rctx);
             }
 
-            // HUD + legend once, over the whole window (screen-space ImGui).
+            // HUD + buttons once, over the whole window (screen-space ImGui).
             glViewport(0, 0, fbW, fbH);
             level->renderHUD(rctx);
-            drawLegend(vis);
+
+            if (menu.renderSettingsButton()) settingsOpen = !settingsOpen;
+            if (settingsOpen) drawSettings(vis, settingsOpen);
 
             if (menu.renderBackButton() || level->checkWin()) {
                 level.reset();
+                settingsOpen = false;
                 state = GameState::MENU;
             }
         }

@@ -58,3 +58,16 @@ bool Menu::renderBackButton() {
     ImGui::End();
     return clicked;
 }
+
+bool Menu::renderSettingsButton() {
+    // Stacked just below the Back button; kept clear of the level HUD at (140,10).
+    ImGui::SetNextWindowPos(ImVec2(10, 80), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(120, 60), ImGuiCond_Always);
+
+    ImGui::Begin("SettingsBtn", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
+
+    bool clicked = ImGui::Button("Settings", ImVec2(100, 40));
+
+    ImGui::End();
+    return clicked;
+}

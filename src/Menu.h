@@ -12,6 +12,9 @@ public:
     // Renders the in-level Back button. Returns true if it was clicked.
     bool renderBackButton();
 
+    // Renders the in-level Settings button (below Back). Returns true if clicked.
+    bool renderSettingsButton();
+
 private:
     bool initialized = false;
 };
