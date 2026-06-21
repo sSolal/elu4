@@ -3,10 +3,10 @@
 #include <cmath>
 
 Camera3D::Camera3D()
-    : pos(-3.0f, 3.0f, 3.0f),
+    : pos(-1.112f, 0.912f, 1.755f),
       up(0.0f, 1.0f, 0.0f),
-      yaw(-45.0f),
-      pitch(-35.0f),
+      yaw(-57.30f),
+      pitch(-26.11f),
       speed(1.5f),
       lookSpeed(60.0f) {}
 
