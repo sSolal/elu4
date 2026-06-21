@@ -21,6 +21,8 @@ add_executable(game
     src/Object4D.cpp
     src/ObjectBuffer.cpp
     src/Menu.cpp
+    src/UiTheme.cpp
+    src/MenuBackground.cpp
     src/LevelRegistry.cpp
     src/levels/CorridorLevel.cpp
     src/levels/DodgeballLevel.cpp

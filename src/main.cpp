@@ -10,6 +10,8 @@
 #include <string>
 #include "GameState.h"
 #include "Menu.h"
+#include "MenuBackground.h"
+#include "UiTheme.h"
 #include "primitives.h"
 #include "ObjectBuffer.h"
 #include "Renderer.h"
@@ -62,14 +64,17 @@ static bool segmented(const char* id, const char* const* opts, int count, int& v
         if (i > 0) ImGui::SameLine();
         const bool active = (i == value);
         if (active) {
-            ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.26f, 0.59f, 0.98f, 1.00f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.26f, 0.59f, 0.98f, 1.00f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.26f, 0.59f, 0.98f, 1.00f));
+            // Lamp amber for the selected segment — Elua's accent, not ImGui blue.
+            const ImVec4 lamp = elua::colLamp();
+            ImGui::PushStyleColor(ImGuiCol_Button,        lamp);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, lamp);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  lamp);
+            ImGui::PushStyleColor(ImGuiCol_Text,          elua::colNight800());
         }
         ImGui::PushID(i);
         if (ImGui::Button(opts[i])) { value = i; changed = true; }
         ImGui::PopID();
-        if (active) ImGui::PopStyleColor(3);
+        if (active) ImGui::PopStyleColor(4);
     }
     ImGui::PopID();
     return changed;
@@ -189,7 +194,7 @@ int main(int argc, char** argv) {
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
     // Create window
-    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "4D Game", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Elua", nullptr, nullptr);
     if (!window) {
         std::cerr << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
@@ -224,10 +229,12 @@ int main(int argc, char** argv) {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
-    ImGui::StyleColorsDark();
+    elua::applyEluaStyle();              // Elua's lamplit theme (replaces dark default)
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
+
+    elua::loadEluaFonts();               // Fraunces (wordmark) + Public Sans (body)
 
     // Create game systems
     GameState state = GameState::MENU;
@@ -238,6 +245,7 @@ int main(int argc, char** argv) {
     ObjectBuffer hyperBuf;
     hyperBuf.init(hyperMesh);
     Renderer renderer;
+    MenuBackground menuBg;   // animated lamplit title-screen background
 
     // The active level (null in the menu). Constructed lazily from the registry
     // when the player picks a level; reset() on Back / win frees its resources.
@@ -475,7 +483,7 @@ int main(int argc, char** argv) {
         if (fpsAccum >= 1.0) {
             double fps = fpsFrames / fpsAccum;
             char title[128];
-            snprintf(title, sizeof(title), "4D Game  -  %.0f FPS (%.1f ms)",
+            snprintf(title, sizeof(title), "Elua  —  %.0f FPS (%.1f ms)",
                      fps, 1000.0 * fpsAccum / fpsFrames);
             glfwSetWindowTitle(window, title);
             if (fpsLog) std::cout << title << std::endl;
@@ -524,6 +532,9 @@ int main(int argc, char** argv) {
         glm::mat4 projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
 
         if (state == GameState::MENU) {
+            // Animated lamplit background behind the title screen (drawn over the
+            // clear, before ImGui). The hand-drawn drift + mark layer on top of it.
+            menuBg.render((float)glfwGetTime(), fbW, fbH);
             int sel = menu.renderMainMenu();
             if (sel >= 0) {
                 level = levelRegistry()[sel].factory();
