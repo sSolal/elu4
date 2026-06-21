@@ -2,6 +2,7 @@
 
 #include "Renderer.h"
 #include "primitives.h"
+#include "mesh_merge.h"
 #include "imgui.h"
 #include <algorithm>
 #include <cmath>
@@ -46,9 +47,9 @@ DodgeballLevel::~DodgeballLevel() {
 }
 
 void DodgeballLevel::load() {
-    // Shared meshes: one thin floor slab, one ball.
-    floorMesh_ = generateBox({TILE, TILE_HALF_Y, TILE, TILE});
-    floorBuf_.init(floorMesh_);
+    // Shared base meshes: one thin floor slab (occludes=false: a floor is looked
+    // across, not through), one ball.
+    Object4D floorTile = generateGround({TILE, TILE_HALF_Y, TILE, TILE});
     ballMesh_  = generateHypersphere();   // radius 0.5
     ballBuf_.init(ballMesh_);
 
@@ -56,8 +57,10 @@ void DodgeballLevel::load() {
     const glm::vec3 floorShade[2] = {{0.26f, 0.36f, 0.28f}, {0.17f, 0.26f, 0.20f}};
     const Math4D::Rotor4D I = Math4D::Rotor4D::identity();
     const float visualY = TOP_Y - TILE_HALF_Y;          // slab centre so its top sits at TOP_Y
-    const float collideY = TOP_Y - TILE;                 // cube collider whose top also sits at TOP_Y
 
+    // Bake every checkerboard tile into ONE mesh, and replace the per-tile collider
+    // grid with a single flat ground collider whose top sits at TOP_Y.
+    std::vector<ObjectInstance> tiles;
     int wi = 0;
     for (float w = W_NEAR; w >= W_FAR; w -= STEP, ++wi) {
         for (int ix = -NX; ix <= NX; ++ix) {
@@ -65,12 +68,15 @@ void DodgeballLevel::load() {
                 float x = ix * STEP, z = iz * STEP;
                 int parity = (ix + iz + wi) & 1;
                 glm::vec3 shade = floorShade[parity];
-                floorInsts_.push_back({glm::vec4(x, visualY, z, w), I, shade, shade});
-                // Continuous collision floor: cube colliders abut across X/Z/W.
-                world_.addObject(glm::vec4(x, collideY, z, w), TILE);
+                tiles.push_back({glm::vec4(x, visualY, z, w), I, shade, shade});
             }
         }
     }
+    floorMesh_  = mergeInstances(floorTile, tiles);
+    floorBuf_.init(floorMesh_);
+    floorInsts_ = mergedInstance();
+    // Cover the whole play volume (X/Z out to ~10, W down to -28); generous margin.
+    world_.addFlatGround(TOP_Y, 32.0f);
 
     loaded_ = true;
 }

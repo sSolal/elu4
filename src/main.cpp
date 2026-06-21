@@ -24,8 +24,8 @@
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
 
-const unsigned int SCR_WIDTH = 800;
-const unsigned int SCR_HEIGHT = 600;
+const unsigned int SCR_WIDTH = 1920;
+const unsigned int SCR_HEIGHT = 1080;
 
 // Small read-only legend listing every visualization toggle and its state. The
 // desktop path uses the interactive drawSettings() overlay instead; this remains
@@ -260,6 +260,10 @@ int main(int argc, char** argv) {
 
     // Global visualization toggles (P/M/N/B/F/V/G), with per-key edge-detection.
     RenderSettings vis;
+    // OCC_OFF=1 : start with 4D hidden-surface removal disabled (Ctrl+X still toggles
+    // it live). The per-fragment occlusion pass dominates GPU cost, so pairing this
+    // with NO_VSYNC isolates how much of the frame it accounts for.
+    if (getenv("OCC_OFF")) vis.occlude4D = false;
     bool pWas = false, mWas = false, nWas = false, bWas = false,
          fWas = false, vWas = false, tWas = false, xWas = false;
 

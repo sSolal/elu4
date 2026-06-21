@@ -203,9 +203,7 @@ void PlaneLevel::render(const LevelContext& ctx) {
     // Relax the depth fog for this level only: with hoops strung far down -W, the
     // global fog would swallow them long before you could read them. Push the fog
     // window far out and soften its strength so distant hoops stay clearly visible.
-    RenderSettings vis = ctx.vis;
-    vis.depthFar    = std::max(vis.depthFar, 120.0f);
-    vis.fogStrength = std::min(vis.fogStrength, 0.18f);
+    RenderSettings vis = largeScene(ctx.vis, 120.0f, 0.18f);
 
     auto draw = [&](const std::vector<ObjectInstance>& insts, const Object4D& mesh, ObjectBuffer& buf) {
         ctx.renderer.drawObjects(insts, mesh, buf, cam4D_, ori, focal_, ctx.innerMVP, vis);

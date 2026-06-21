@@ -66,9 +66,9 @@ namespace {
     // occluder is a convex solid = intersection of its facet half-spaces; planes are
     // flattened, each occluder owning the slice [planeOfs, planeOfs+planeCnt).
     struct OccUpload {
-        std::vector<glm::vec4> center;   // N centers (4D camera space)
+        std::vector<glm::vec4> wrange;   // per-occluder camera-W extent (x=min, y=max)
         std::vector<glm::vec4> planeN;   // facet outward unit normals (camera space)
-        std::vector<float>     planeD;   // facet offsets (local; shader adds dot(n,center))
+        std::vector<float>     planeD;   // facet ABSOLUTE offsets (center baked in on CPU)
         std::vector<int>       planeOfs; // first plane index per occluder
         std::vector<int>       planeCnt; // plane count per occluder
         std::vector<int>       slotOf;   // instance index -> occluder slot (-1 if dropped)
@@ -81,10 +81,13 @@ namespace {
     // Build the occluder set for one draw call: every instance is the convex solid
     // { x : dot(hullN[i], x) <= hullD[i] } (local space). When there are more than the
     // cap, keep the nearest (depthSortInstances is far→near, so the tail).
+    // `verts` are the occluder mesh's local vertices; we use them to precompute each
+    // occluder's camera-W extent for the per-fragment early-out (see inner.frag).
     template <typename Inst>
     OccUpload buildOccluders(const std::vector<Inst>& instances,
                              const std::vector<glm::vec4>& hullN,
                              const std::vector<float>& hullD,
+                             const std::vector<glm::vec4>& verts,
                              const glm::vec4& camPos, const glm::mat4& camM) {
         OccUpload up;
         const int n = (int)instances.size();
@@ -107,7 +110,7 @@ namespace {
                     n, kMaxOccluders);
             }
         }
-        up.center.reserve(idx.size());
+        up.wrange.reserve(idx.size());
         up.planeN.reserve(idx.size() * planes);
         up.planeD.reserve(idx.size() * planes);
         up.planeOfs.reserve(idx.size());
@@ -124,17 +127,36 @@ namespace {
                 }
                 break;
             }
-            glm::mat4 R = camM * instances[i].orientation.toMatrix();  // local normal -> camera
-            up.slotOf[i] = (int)up.center.size();
+            const Math4D::Rotor4D& ori = instances[i].orientation;
+            glm::mat4 objM = ori.toMatrix();
+            glm::mat4 R = camM * objM;                                 // local normal -> camera
+            glm::vec4 cen = camM * (instances[i].pos - camPos);
+
+            // Camera-W extent of this occluder solid: the t-interval it can cover on
+            // ANY fragment's ray is contained in [wMin, wMax], so a fragment whose
+            // (tFrag, 0) window misses this range can skip the whole plane test.
+            float wMin =  1e30f, wMax = -1e30f;
+            glm::vec4 base = instances[i].pos - camPos;
+            for (const glm::vec4& v : verts) {
+                float cw = (camM * (objM * v + base)).w;
+                wMin = glm::min(wMin, cw);
+                wMax = glm::max(wMax, cw);
+            }
+
+            up.slotOf[i] = (int)up.wrange.size();
             up.planeOfs.push_back((int)up.planeN.size());
             up.planeCnt.push_back(planes);
-            up.center.push_back(camM * (instances[i].pos - camPos));
+            up.wrange.push_back(glm::vec4(wMin, wMax, 0.0f, 0.0f));
             for (int p = 0; p < planes; ++p) {
-                up.planeN.push_back(R * hullN[p]);
-                up.planeD.push_back(hullD[p]);
+                glm::vec4 nCam = R * hullN[p];
+                up.planeN.push_back(nCam);
+                // Bake the center term into an ABSOLUTE offset so the per-fragment
+                // shader never recomputes dot(n, center) (nor reads the center) for
+                // every plane of every occluder — that was pure per-fragment overhead.
+                up.planeD.push_back(hullD[p] + glm::dot(nCam, cen));
             }
         }
-        up.count = (int)up.center.size();
+        up.count = (int)up.wrange.size();
         return up;
     }
 
@@ -145,7 +167,7 @@ namespace {
         sh.setInt("uOccCount", on ? occ.count : 0);
         sh.setInt("uSelfIndex", -1);  // per-instance value set in the draw loop
         if (on) {
-            sh.setVec4Array("uOccCenter", occ.center.data(), occ.count);
+            sh.setVec4Array("uOccWRange", occ.wrange.data(), occ.count);
             sh.setIntArray("uOccPlaneOfs", occ.planeOfs.data(), occ.count);
             sh.setIntArray("uOccPlaneCnt", occ.planeCnt.data(), occ.count);
             sh.setVec4Array("uOccPlaneN", occ.planeN.data(), (int)occ.planeN.size());
@@ -391,7 +413,8 @@ void Renderer::drawObjects(
     const std::vector<ObjectInstance>& occInsts = external ? *occluders : instances;
     const bool occOn = vis.occlude4D && occObj.occludes;
     OccUpload occ;
-    if (occOn) occ = buildOccluders(occInsts, occObj.hullN, occObj.hullD, cam4D.pos, camM);
+    if (occOn) occ = buildOccluders(occInsts, occObj.hullN, occObj.hullD,
+                                    occObj.vertices, cam4D.pos, camM);
     uploadOccluders(innerShader, occ, occOn);
 
     // Painter's order between instances: farthest 4D depth first.

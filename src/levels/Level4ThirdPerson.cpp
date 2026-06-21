@@ -2,6 +2,7 @@
 
 #include "Renderer.h"
 #include "primitives.h"
+#include "mesh_merge.h"
 #include "HudWidgets.h"
 #include "imgui.h"
 #include <glm/gtc/matrix_transform.hpp>
@@ -61,8 +62,8 @@ void Level4ThirdPerson::load() {
     // along W — reads against the grid. One big collider cube underneath tops out
     // at FLOOR_TOP (the tiles are visual; physics stays simple). ---
     const float cell = ARENA_HALF / FLOOR_DIV;   // half-extent of one ground cube
-    floorMesh_ = generateBox(glm::vec4(cell, FLOOR_HALF_Y, cell, cell));
-    floorBuf_.init(floorMesh_);
+    Object4D floorTile = generateGround(glm::vec4(cell, FLOOR_HALF_Y, cell, cell));
+    std::vector<ObjectInstance> ftiles;
     for (int ix = 0; ix < FLOOR_DIV; ++ix)
         for (int iz = 0; iz < FLOOR_DIV; ++iz)
             for (int iw = 0; iw < FLOOR_DIV; ++iw) {
@@ -70,8 +71,13 @@ void Level4ThirdPerson::load() {
                             (2 * iz - (FLOOR_DIV - 1)) * cell,
                             (2 * iw - (FLOOR_DIV - 1)) * cell);
                 glm::vec3 col = ((ix + iz + iw) & 1) ? FLOOR_B : FLOOR_A;
-                floorInsts_.push_back({c, Math4D::Rotor4D::identity(), col, col});
+                ftiles.push_back({c, Math4D::Rotor4D::identity(), col, col});
             }
+    // Bake the FLOOR_DIV^3 checkerboard tiles into one mesh (the single big collider
+    // below already handles footing).
+    floorMesh_ = mergeInstances(floorTile, ftiles);
+    floorBuf_.init(floorMesh_);
+    floorInsts_ = mergedInstance();
     world_.addObject(glm::vec4(0.0f, FLOOR_TOP - ARENA_HALF, 0.0f, 0.0f), ARENA_HALF);
 
     // --- Perimeter fence: one thin-slab mesh per horizontal axis, at + and -. ---

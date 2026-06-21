@@ -41,10 +41,11 @@ void TurnAndFaceLevel::load() {
 
     // The floor: a flat slab, thin in Y and extended across the X/Z/W 3-space
     // (the "ground" of a 4D world), so it reads as a plane — not a hypercube.
-    // Visible slab top sits at FLOOR_TOP; a cube collider with the same top does
-    // the actual standing (PhysicsAABB is uniform, so the visual and collider are
-    // separate, exactly as in Dodgeball).
-    groundMesh_ = generateBox(glm::vec4(GROUND_XZW, GROUND_Y, GROUND_XZW, GROUND_XZW));
+    // generateGround (occludes=false): a floor is looked across, not through, so it
+    // needs no per-fragment 4D occlusion. Visible slab top sits at FLOOR_TOP; a cube
+    // collider with the same top does the actual standing (PhysicsAABB is uniform, so
+    // the visual and collider are separate, exactly as in Dodgeball).
+    groundMesh_ = generateGround(glm::vec4(GROUND_XZW, GROUND_Y, GROUND_XZW, GROUND_XZW));
     groundBuf_.init(groundMesh_);
     groundInsts_.push_back({glm::vec4(0.0f, FLOOR_TOP - GROUND_Y, 0.0f, 0.0f),
                             Math4D::Rotor4D::identity(),

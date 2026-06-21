@@ -203,9 +203,7 @@ void BigVistaLevel::render(const LevelContext& ctx) {
 
     // Big scene: relax the fog and push the far plane so the distant mountain and
     // its orb stay readable (cf. ForestFetchLevel / PlaneLevel4D).
-    RenderSettings vis = ctx.vis;
-    vis.depthFar    = std::max(vis.depthFar, 260.0f);
-    vis.fogStrength = std::min(vis.fogStrength, 0.22f);
+    RenderSettings vis = largeScene(ctx.vis, 260.0f, 0.22f);
 
     auto draw = [&](const std::vector<ObjectInstance>& insts, const Object4D& mesh, ObjectBuffer& buf) {
         if (!insts.empty())

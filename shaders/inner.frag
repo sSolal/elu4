@@ -22,7 +22,7 @@ uniform bool  uOcclude;                 // master switch (X toggle)
 uniform int   uOccCount;
 uniform int   uSelfIndex;               // occluder slot of the instance being drawn; skipped
 uniform float uFocal;                   // W-perspective focal length; 4D eye sits at w=uFocal
-uniform vec4  uOccCenter[MAX_OCC];      // occluder center, 4D camera space
+uniform vec4  uOccWRange[MAX_OCC];      // occluder camera-W extent (x=min, y=max); cheap reject
 uniform int   uOccPlaneOfs[MAX_OCC];    // first plane index for this occluder
 uniform int   uOccPlaneCnt[MAX_OCC];    // plane count for this occluder
 uniform vec4  uOccPlaneN[MAX_PLANES];   // facet outward unit normal, 4D camera space
@@ -33,13 +33,12 @@ uniform float uOccPlaneD[MAX_PLANES];   // facet offset, relative to the occlude
 // occluder o's solid covers this ray (tlo>thi ⇒ the ray misses it). Each half-space
 // dot(n, v(t)-center) <= d is linear in t, so it clips one side of the interval.
 vec2 occInterval(int o, vec3 P) {
-    vec4 c   = uOccCenter[o];
     int  ofs = uOccPlaneOfs[o];
     int  cnt = uOccPlaneCnt[o];
     float tlo = -1e30, thi = 1e30;
     for (int j = 0; j < cnt; ++j) {
         vec4  n = uOccPlaneN[ofs + j];
-        float d = uOccPlaneD[ofs + j] + dot(n, c);      // shift to an absolute offset
+        float d = uOccPlaneD[ofs + j];                  // absolute offset (center baked in on CPU)
         // dot(n, v(t)) = dot(n.xyz,P)*uFocal + t*(n.w - dot(n.xyz,P))
         float A = dot(n.xyz, P);
         float p = A * uFocal - d;
@@ -78,6 +77,11 @@ bool occluded4D() {
     // EPS lets abutting/coincident surfaces tie instead of flickering.
     const float EPS = 1e-3;
     for (int o = 0; o < uOccCount; ++o) {
+        // Cheap reject: the occluder can only hide this fragment if its camera-W
+        // extent overlaps the (tFrag, 0) window. Most occluders in an elongated
+        // scene (a corridor, a maze hall) fail this and skip the 8-plane test.
+        vec2 wr = uOccWRange[o].xy;
+        if (wr.y <= tFrag || wr.x >= 0.0) continue;
         vec2 iv = occInterval(o, P);
         if (iv.x > iv.y) continue;                   // ray misses this occluder
         float lo = max(iv.x, tFrag);                 // not behind the fragment

@@ -121,6 +121,25 @@ inline Object4D generateBox(const glm::vec4& half) {
     return box;
 }
 
+// A ground / backdrop slab: identical geometry to generateBox but occludes=false.
+//
+// Occlusion convention (this is the single biggest per-level performance lever):
+//   * Floors, terrain, distant scenery -> generateGround (or mergeInstances, which
+//     also sets occludes=false). Grounds are looked ACROSS, not through, so they
+//     need NO 4D hidden-surface test. That per-fragment occlusion pass (see
+//     inner.frag occluded4D) is the dominant GPU cost and is pointless for a floor.
+//   * Walls and any solid the player must not see THROUGH in 4D -> generateBox
+//     (occludes=true), and keep them as instances culled to the 64-occluder budget
+//     (cf. MazeLevel's PVS) rather than merged.
+//   * Tesseract / hypersphere puzzle objects -> keep occludes=true (self-occlusion
+//     is the whole 4D effect).
+inline Object4D generateGround(const glm::vec4& half) {
+    Object4D g = generateBox(half);
+    g.name     = "Ground";
+    g.occludes = false;
+    return g;
+}
+
 // A polyline of `pointCount` vertices joined by pointCount-1 consecutive edges.
 // Vertices start at the origin — the caller overwrites mesh.vertices with the
 // actual 4D points each frame (the count is fixed so the GPU buffer is allocated

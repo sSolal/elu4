@@ -2,7 +2,18 @@
 #include <cmath>
 
 void PhysicsWorld::addObject(glm::vec4 center, float halfSize) {
-    objects_.push_back({center, halfSize});
+    objects_.push_back({center, glm::vec4(halfSize)});
+}
+
+void PhysicsWorld::addBox(glm::vec4 center, glm::vec4 half) {
+    objects_.push_back({center, half});
+}
+
+void PhysicsWorld::addFlatGround(float surfaceY, float halfExtent, float thickness) {
+    // Top face at surfaceY => center.y = surfaceY - thickness; huge in X/Z/W.
+    glm::vec4 center(0.0f, surfaceY - thickness, 0.0f, 0.0f);
+    glm::vec4 half(halfExtent, thickness, halfExtent, halfExtent);
+    objects_.push_back({center, half});
 }
 
 void PhysicsWorld::step(PhysicsBody& body, glm::vec4 desiredMove, float dt) {
@@ -26,14 +37,12 @@ void PhysicsWorld::step(PhysicsBody& body, glm::vec4 desiredMove, float dt) {
 
 void PhysicsWorld::resolveCollision(PhysicsBody& body, const PhysicsAABB& aabb) {
     float pr = body.radius;
-    float hs = aabb.halfSize;
-    float total = pr + hs;
 
-    // Compute overlap along each axis
-    float dx = total - std::abs(body.pos.x - aabb.center.x);
-    float dy = total - std::abs(body.pos.y - aabb.center.y);
-    float dz = total - std::abs(body.pos.z - aabb.center.z);
-    float dw = total - std::abs(body.pos.w - aabb.center.w);
+    // Compute overlap along each axis (per-axis half-extent + the body radius).
+    float dx = (pr + aabb.half.x) - std::abs(body.pos.x - aabb.center.x);
+    float dy = (pr + aabb.half.y) - std::abs(body.pos.y - aabb.center.y);
+    float dz = (pr + aabb.half.z) - std::abs(body.pos.z - aabb.center.z);
+    float dw = (pr + aabb.half.w) - std::abs(body.pos.w - aabb.center.w);
 
     // No collision if any axis has no overlap
     if (dx <= 0.0f || dy <= 0.0f || dz <= 0.0f || dw <= 0.0f) {

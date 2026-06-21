@@ -1,6 +1,7 @@
 #pragma once
 
 #include <glm/glm.hpp>
+#include <algorithm>
 
 // Global, live-toggleable visualization aids for reading the projected-4D scene.
 // Owned by the runner (main.cpp) and threaded through LevelContext so every level
@@ -60,3 +61,13 @@ struct RenderSettings {
         return bg == 0 ? 0.45f : 0.5f;
     }
 };
+
+// Relax fog / far plane for a large open scene so distant landmarks stay readable.
+// Consolidates the identical hand-rolled clamps in ForestFetch / BigVista / Maze:
+// push the far plane out (never in) and pull fog strength down (never up).
+inline RenderSettings largeScene(const RenderSettings& base, float far, float maxFog) {
+    RenderSettings v = base;
+    v.depthFar    = std::max(v.depthFar, far);
+    v.fogStrength = std::min(v.fogStrength, maxFog);
+    return v;
+}

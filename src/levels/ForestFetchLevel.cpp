@@ -2,6 +2,7 @@
 
 #include "Renderer.h"
 #include "primitives.h"
+#include "mesh_merge.h"
 #include "HudWidgets.h"
 #include "imgui.h"
 #include <glm/gtc/matrix_transform.hpp>
@@ -61,17 +62,18 @@ ForestFetchLevel::~ForestFetchLevel() {
 
 void ForestFetchLevel::load() {
     // --- Tree asset (reused from the project's objects). Grown to forest scale, and
-    // a taller variant for the named landmark trees. ---
+    // a taller variant for the named landmark trees. The forest trees are merged
+    // into one mesh below (decorative scenery, looked across), so keep the scaled
+    // single-tree as a local base. The landmark trees stay as their own instances. ---
     Object4D rawTree;
     rawTree.loadFromJSON("objects/tree.json");
-    treeMesh_     = scaledMesh(rawTree, TREE_SCALE);
+    Object4D treeBase = scaledMesh(rawTree, TREE_SCALE);
     landmarkMesh_ = scaledMesh(rawTree, LM_SCALE);
-    treeBuf_.init(treeMesh_);
     landmarkBuf_.init(landmarkMesh_);
 
-    // --- Ground: thin slabs in Y, filling each cell in X/Z/W. ---
-    groundMesh_ = generateBox(glm::vec4(TILE, TILE_Y, TILE, TILE));
-    groundBuf_.init(groundMesh_);
+    // --- Ground base tile: thin slab in Y, occludes=false (a floor is looked
+    // ACROSS, not through). Merged into one mesh below. ---
+    Object4D groundTile = generateGround(glm::vec4(TILE, TILE_Y, TILE, TILE));
 
     // --- NPC marker: a tall cyan pillar; gold cube: a small bright hypercube. ---
     npcMesh_ = generateBox(glm::vec4(0.6f, 1.2f, 0.6f, 0.6f));
@@ -93,21 +95,25 @@ void ForestFetchLevel::load() {
     for (const auto& lm : landmarks_)
         landmarkInsts_.push_back({lm.pos, Math4D::Rotor4D::identity(), lm.color, lm.color * 1.3f});
 
-    // --- Ground tiles + colliders. The floor is a 3-volume: tiles tile X, Z and W
-    // at the surface. Collider is a uniform cube (PhysicsAABB is uniform) whose top
-    // sits at SURFACE_Y; the visual slab is thin in Y with its top also at SURFACE_Y. ---
-    const float collideY = SURFACE_Y - TILE;     // cube top at SURFACE_Y
-    const float visualY   = SURFACE_Y - TILE_Y;  // slab top at SURFACE_Y
+    // --- Ground tiles. The floor is a 3-volume: tiles tile X, Z and W at the
+    // surface. They are baked into ONE merged mesh (one project/upload/sort/draw,
+    // no per-fragment occlusion) instead of (2*NT+1)^3 separate occluding instances,
+    // and a SINGLE flat collider replaces the per-tile collider grid. ---
+    const float visualY = SURFACE_Y - TILE_Y;  // slab top at SURFACE_Y
     const Math4D::Rotor4D I = Math4D::Rotor4D::identity();
+    std::vector<ObjectInstance> tiles;
     for (int ix = -NT; ix <= NT; ++ix)
     for (int iz = -NT; iz <= NT; ++iz)
     for (int iw = -NT; iw <= NT; ++iw) {
         float x = ix * STEP, z = iz * STEP, w = iw * STEP;
         int parity = (ix + iz + iw) & 1;
         glm::vec3 shade = parity ? GROUND_A : GROUND_B;
-        groundInsts_.push_back({glm::vec4(x, visualY, z, w), I, shade, shade});
-        world_.addObject(glm::vec4(x, collideY, z, w), TILE);
+        tiles.push_back({glm::vec4(x, visualY, z, w), I, shade, shade});
     }
+    groundMesh_  = mergeInstances(groundTile, tiles);
+    groundBuf_.init(groundMesh_);
+    groundInsts_ = mergedInstance();
+    world_.addFlatGround(SURFACE_Y, NT * STEP + TILE);   // ground extent in X/Z/W
 
     // --- Scatter ordinary trees through the X-Z-W volume, kept out of the hub and
     // the gold/final clearings so the quest points stay reachable and readable. ---
@@ -135,6 +141,12 @@ void ForestFetchLevel::load() {
         treeInsts_.push_back({p, Math4D::Rotor4D::identity(), TREE_LO, TREE_HI});
         ++placed;
     }
+
+    // Bake the scattered forest into one mesh: TREE_N separate projects+uploads+
+    // draws collapse to a single one (decorative, non-occluding).
+    treeMesh_ = mergeInstances(treeBase, treeInsts_);
+    treeBuf_.init(treeMesh_);
+    treeInsts_ = mergedInstance();
 
     loaded_ = true;
 }
@@ -173,9 +185,7 @@ void ForestFetchLevel::render(const LevelContext& ctx) {
     const Math4D::Rotor4D ori = cam4D_.getOrientation();
 
     // Large scene: relax the fog so distant landmarks stay readable (cf. PlaneLevel4D).
-    RenderSettings vis = ctx.vis;
-    vis.depthFar    = std::max(vis.depthFar, 120.0f);
-    vis.fogStrength = std::min(vis.fogStrength, 0.30f);
+    RenderSettings vis = largeScene(ctx.vis, 120.0f, 0.30f);
 
     auto draw = [&](const std::vector<ObjectInstance>& insts, const Object4D& mesh, ObjectBuffer& buf) {
         if (!insts.empty())

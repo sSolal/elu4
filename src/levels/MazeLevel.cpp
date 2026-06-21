@@ -55,9 +55,12 @@ MazeLevel::~MazeLevel() {
 void MazeLevel::load() {
     minimap_ = std::make_unique<Minimap>();
 
-    // Shared block meshes: a full CELL cube for walls, a thin slab for floor tiles.
+    // Shared block meshes: a full CELL cube for walls (occludes — you cannot see
+    // through a 4D wall, and the PVS cull below keeps the visible wall set under the
+    // occluder budget), a thin slab for floor tiles (generateGround: a floor is
+    // looked across, and it is anyway externally occluded by the visible walls).
     wallMesh_  = generateBox(glm::vec4(CELL * 0.5f));
-    floorMesh_ = generateBox(glm::vec4(CELL * 0.5f, 0.15f, CELL * 0.5f, CELL * 0.5f));
+    floorMesh_ = generateGround(glm::vec4(CELL * 0.5f, 0.15f, CELL * 0.5f, CELL * 0.5f));
     wallBuf_.init(wallMesh_);
     floorBuf_.init(floorMesh_);
 
@@ -287,9 +290,7 @@ void MazeLevel::render(const LevelContext& ctx) {
     const Math4D::Rotor4D ori = cam4D_.getOrientation();
 
     // Large scene: keep distant walls readable (cf. ForestFetchLevel).
-    RenderSettings vis = ctx.vis;
-    vis.depthFar    = std::max(vis.depthFar, 90.0f);
-    vis.fogStrength = std::min(vis.fogStrength, 0.40f);
+    RenderSettings vis = largeScene(ctx.vis, 90.0f, 0.40f);
 
     // Visibility cull: gather only the walls/floors reachable by sight from the
     // player's cell, so the 4D occlusion (capped occluder budget) covers them all and
