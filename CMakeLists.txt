@@ -9,6 +9,23 @@ find_package(GLEW REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(glm REQUIRED)
 
+# --- Embedded Lua 5.4 + sol2 (scripting core, vendored in src/third_party) ---
+# Lua is built from the vendored amalgamated sources as a small static lib
+# (the standalone lua.c/luac.c mains were dropped when vendoring). sol2 is the
+# header-only C++ binding layer. Only targets that embed scripting link these;
+# the math/CLI tools and the visualizer do not.
+file(GLOB LUA_SRC ${CMAKE_SOURCE_DIR}/src/third_party/lua/*.c)
+add_library(lua_static STATIC ${LUA_SRC})
+target_include_directories(lua_static PUBLIC ${CMAKE_SOURCE_DIR}/src/third_party/lua)
+set_target_properties(lua_static PROPERTIES C_STANDARD 99 POSITION_INDEPENDENT_CODE ON)
+
+add_library(sol2 INTERFACE)
+target_include_directories(sol2 INTERFACE ${CMAKE_SOURCE_DIR}/src/third_party/sol2)
+target_link_libraries(sol2 INTERFACE lua_static)
+# Full runtime safety checks: type/usertype/bounds checking + clear Lua errors,
+# so a buggy level script raises a catchable error instead of corrupting memory.
+target_compile_definitions(sol2 INTERFACE SOL_ALL_SAFETIES_ON=1)
+
 add_executable(game
     src/main.cpp
     src/Shader.cpp
@@ -35,6 +52,8 @@ add_executable(game
     src/levels/MazeLevel.cpp
     src/levels/BigVistaLevel.cpp
     src/levels/StubLevel.cpp
+    src/levels/ScriptedLevel.cpp
+    src/lua/LuaBindings.cpp
     src/imgui/imgui.cpp
     src/imgui/imgui_draw.cpp
     src/imgui/imgui_widgets.cpp
@@ -72,18 +91,26 @@ add_executable(tests
     tests/test_math4d.cpp
 )
 
+# Headless smoke test for the core Lua bindings (no OpenGL).
+add_executable(lua_smoke
+    src/lua/lua_smoke.cpp
+    src/lua/LuaBindings.cpp
+)
+
 target_include_directories(game PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/imgui ${CMAKE_SOURCE_DIR}/src/imgui/backends)
 target_include_directories(visualizer PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_include_directories(generate_objects PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_include_directories(4dg PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_include_directories(4dscene PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_include_directories(tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(lua_smoke PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
 target_link_libraries(game
     OpenGL::OpenGL
     GLEW::GLEW
     glfw
     glm::glm
+    sol2
 )
 
 # Optional OpenXR VR support (Route A — PCVR via WiVRn/Monado). Off by default so
@@ -126,5 +153,11 @@ target_link_libraries(tests
     glm::glm
 )
 
+target_link_libraries(lua_smoke
+    glm::glm
+    sol2
+)
+
 enable_testing()
 add_test(NAME math4d COMMAND tests)
+add_test(NAME lua_smoke COMMAND lua_smoke)

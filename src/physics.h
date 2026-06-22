@@ -12,6 +12,7 @@ struct PhysicsBody {
     float velY    = 0.0f;
     bool onGround = false;
     float radius  = 0.25f;  // uniform radius in all 4 dimensions
+    float gravityScale = 1.0f;  // 0 disables gravity (e.g. a plane); 1 = normal
 };
 
 class PhysicsWorld {

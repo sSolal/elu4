@@ -17,8 +17,9 @@ void PhysicsWorld::addFlatGround(float surfaceY, float halfExtent, float thickne
 }
 
 void PhysicsWorld::step(PhysicsBody& body, glm::vec4 desiredMove, float dt) {
-    // Apply gravity
-    body.velY += GRAVITY * dt;
+    // Apply gravity (scaled per-body: gravityScale = 0 disables it, so a level can
+    // float an object — e.g. the plane — and drive its motion entirely by script).
+    body.velY += GRAVITY * body.gravityScale * dt;
 
     // Combine gravity with desired move
     desiredMove.y = body.velY * dt;

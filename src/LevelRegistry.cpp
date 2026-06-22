@@ -10,6 +10,7 @@
 #include "levels/ForestFetchLevel.h"
 #include "levels/MazeLevel.h"
 #include "levels/BigVistaLevel.h"
+#include "levels/ScriptedLevel.h"
 
 const std::vector<LevelEntry>& levelRegistry() {
     // Built once on first call. Index 0 is the fully-playable Corridor; the rest
@@ -48,6 +49,19 @@ const std::vector<LevelEntry>& levelRegistry() {
 
         r.push_back({"10 - Big Vista", true,
             [] { return std::unique_ptr<Level>(new BigVistaLevel()); }});
+
+        // --- Lua-scripted levels (run alongside the C++ ones during migration) ---
+        r.push_back({"H - Hello (Lua)", true,
+            [] { return std::unique_ptr<Level>(
+                new ScriptedLevel("scripts/levels/hello.lua", "H - Hello (Lua)")); }});
+
+        r.push_back({"6L - Plane (Lua)", true,
+            [] { return std::unique_ptr<Level>(
+                new ScriptedLevel("scripts/levels/plane.lua", "6L - Plane (Lua)")); }});
+
+        r.push_back({"9L - Maze (Lua)", true,
+            [] { return std::unique_ptr<Level>(
+                new ScriptedLevel("scripts/levels/maze.lua", "9L - Maze (Lua)")); }});
 
         return r;
     }();
