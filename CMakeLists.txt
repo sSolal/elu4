@@ -36,6 +36,7 @@ add_executable(game
     src/Renderer.cpp
     src/Minimap.cpp
     src/Object4D.cpp
+    src/Asset.cpp
     src/ObjectBuffer.cpp
     src/Menu.cpp
     src/UiTheme.cpp
@@ -51,13 +52,27 @@ add_executable(game
     src/imgui/backends/imgui_impl_opengl3.cpp
 )
 
+# The visualizer shares the game's real rendering pipeline (Renderer + inner shaders +
+# 4D occlusion) and UI theme; it just swaps the game loop for an orbit camera and a
+# native file picker. No Lua/sol2 — it loads assets through the shared Asset loader.
 add_executable(visualizer
     src/visualizer_main.cpp
-    src/Visualizer.cpp
+    src/Asset.cpp
     src/Shader.cpp
     src/Object4D.cpp
+    src/ObjectBuffer.cpp
+    src/Level2.cpp
+    src/Renderer.cpp
     src/Camera.cpp
     src/physics.cpp
+    src/UiTheme.cpp
+    src/third_party/tinyfiledialogs.c
+    src/imgui/imgui.cpp
+    src/imgui/imgui_draw.cpp
+    src/imgui/imgui_widgets.cpp
+    src/imgui/imgui_tables.cpp
+    src/imgui/backends/imgui_impl_glfw.cpp
+    src/imgui/backends/imgui_impl_opengl3.cpp
 )
 
 add_executable(generate_objects
@@ -87,7 +102,7 @@ add_executable(lua_smoke
 )
 
 target_include_directories(game PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/imgui ${CMAKE_SOURCE_DIR}/src/imgui/backends)
-target_include_directories(visualizer PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(visualizer PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/src/imgui ${CMAKE_SOURCE_DIR}/src/imgui/backends)
 target_include_directories(generate_objects PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_include_directories(4dg PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_include_directories(4dscene PRIVATE ${CMAKE_SOURCE_DIR}/src)

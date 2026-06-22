@@ -80,7 +80,7 @@ function load()
   engine.body.gravityScale = 0.0          -- gravity off; movement is scripted
   engine.set_scene_far(120.0, 0.18)       -- keep distant hoops readable
 
-  planeMesh = engine.make_box(vec4(0.5, 0.5, 0.5, PLANE_HALF_W))
+  planeMesh = engine.asset_mesh(engine.load_asset("assets/plane.json"))
   faceXMesh = engine.make_box(vec4(FACE_T, HOOP_OPENING, HOOP_OPENING, FACE_W))
   faceYMesh = engine.make_box(vec4(HOOP_OPENING, FACE_T, HOOP_OPENING, FACE_W))
   faceZMesh = engine.make_box(vec4(HOOP_OPENING, HOOP_OPENING, FACE_T, FACE_W))

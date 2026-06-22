@@ -30,7 +30,7 @@ function load()
   engine.controls.headReturnStrength = 7.0
   engine.set_depth_cue("fog")
 
-  ballMesh = engine.make_hypersphere(0.5)
+  ballMesh = engine.asset_mesh(engine.load_asset("assets/hypersphere.json"))
   ballSet  = engine.instance_set()
 
   -- Floor: a green checkerboard baked into one mesh + one flat collider.

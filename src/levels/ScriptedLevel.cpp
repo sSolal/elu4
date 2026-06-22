@@ -15,6 +15,7 @@
 #include "Scene.h"
 #include "primitives.h"
 #include "mesh_merge.h"
+#include "Asset.h"
 #include "HudWidgets.h"
 #include "RenderSettings.h"
 #include "lua/LuaBindings.h"
@@ -119,6 +120,20 @@ struct ScriptedLevel::Impl {
 
     std::vector<std::unique_ptr<Object4D>>     meshes;
     std::vector<std::unique_ptr<ObjectBuffer>> buffers;
+
+    // Loaded assets: each part is already registered as a (mesh, buffer) above; this
+    // records the per-part local transform + colours so draw_asset / asset_colliders
+    // can place the whole prop with one call. (Single source of truth for the props
+    // the scene scripts used to build inline.)
+    struct AssetPartInst {
+        int             meshHandle;
+        glm::vec4       pos;
+        Math4D::Rotor4D rot;
+        glm::vec3       colorA, colorB;
+        glm::vec4       half;     // AABB half-extents, for solid colliders
+        bool            solid;
+    };
+    std::vector<std::vector<AssetPartInst>> assets;
 
     std::unique_ptr<Minimap> minimap;
     bool                     minimapTrace = false;
@@ -338,7 +353,7 @@ void ScriptedLevel::buildEngineTable() {
     engine.set_function("make_polyline", [addMesh](int points) {
         return addMesh(generatePolyline(points));
     });
-    // Load a 4D mesh from a project JSON asset (e.g. "objects/tree.json").
+    // Load a 4D mesh from a project JSON asset (e.g. "assets/tree.json").
     engine.set_function("load_mesh", [addMesh](const std::string& path) {
         Object4D m;
         m.loadFromJSON(path);
@@ -391,6 +406,47 @@ void ScriptedLevel::buildEngineTable() {
 
     engine.set_function("instance_set", []() { return InstanceSet{}; });
 
+    // --- Assets (composite props loaded from assets/*.json) ----------------------
+    // load_asset registers every part as a (mesh, buffer) and returns an asset handle.
+    // Composite static props (bed, closet, ...) are drawn with draw_asset; single-part
+    // props that the script instances dynamically (npc, ball, gold cube, plane) grab
+    // the underlying mesh handle with asset_mesh.
+    engine.set_function("load_asset", [this, addMesh](const std::string& path) -> int {
+        Asset a;
+        if (!loadAsset(path, a)) {
+            luaL_error(impl_->lua.lua_state(), "load_asset: failed to load %s", path.c_str());
+            return -1;
+        }
+        std::vector<Impl::AssetPartInst> parts;
+        parts.reserve(a.parts.size());
+        for (auto& p : a.parts) {
+            glm::vec4 half(0.0f);
+            for (const auto& v : p.mesh.vertices) half = glm::max(half, glm::abs(v));
+            int h = addMesh(p.mesh);
+            parts.push_back({h, p.pos, p.rot, p.colorA, p.colorB, half, p.solid});
+        }
+        int handle = (int)impl_->assets.size();
+        impl_->assets.push_back(std::move(parts));
+        return handle;
+    });
+    engine.set_function("asset_mesh", [this](int assetH, sol::optional<int> partIdx) -> int {
+        if (assetH < 0 || assetH >= (int)impl_->assets.size()) return -1;
+        const auto& parts = impl_->assets[assetH];
+        int i = partIdx.value_or(0);
+        if (i < 0 || i >= (int)parts.size()) return -1;
+        return parts[i].meshHandle;
+    });
+    // Register solid-part colliders at a world placement (call in load()).
+    engine.set_function("asset_colliders",
+        [this](int assetH, const glm::vec4& pos, sol::optional<Math4D::Rotor4D> rot) {
+            if (assetH < 0 || assetH >= (int)impl_->assets.size()) return;
+            Math4D::Rotor4D R = rot.value_or(Math4D::Rotor4D::identity());
+            for (const auto& p : impl_->assets[assetH]) {
+                if (!p.solid) continue;
+                world_.addBox(R.rotate(p.pos) + pos, p.half);
+            }
+        });
+
     // --- Drawing (render hook only) ---------------------------------------------
     auto drawInst = [this](int meshH, InstanceSet& set, InstanceSet* occ, int occH) {
         if (!curCtx_) {
@@ -426,6 +482,38 @@ void ScriptedLevel::buildEngineTable() {
         [drawInst](int meshH, InstanceSet& set, int occH, InstanceSet& occ) {
             drawInst(meshH, set, &occ, occH);
         }));
+
+    // Draw a whole asset at a world placement. Each part renders exactly as the old
+    // inline box did (its own self-occluding draw call), so behaviour is preserved.
+    // Optional colorA/colorB tint every part (single-colour props); omit to use the
+    // asset's baked per-part colours (composite props like the bed).
+    engine.set_function("draw_asset",
+        [this](int assetH, const glm::vec4& pos, sol::optional<Math4D::Rotor4D> rot,
+               sol::optional<glm::vec3> cA, sol::optional<glm::vec3> cB) {
+            if (!curCtx_) {
+                luaL_error(impl_->lua.lua_state(),
+                           "engine.draw_asset() called outside render()");
+                return;
+            }
+            if (assetH < 0 || assetH >= (int)impl_->assets.size()) {
+                luaL_error(impl_->lua.lua_state(), "draw_asset: bad asset handle %d", assetH);
+                return;
+            }
+            Math4D::Rotor4D R = rot.value_or(Math4D::Rotor4D::identity());
+            RenderSettings vis = currentVis();
+            Math4D::Rotor4D camOri = cam4D_.getOrientation();
+            for (const auto& p : impl_->assets[assetH]) {
+                ObjectInstance inst;
+                inst.pos         = R.rotate(p.pos) + pos;
+                inst.orientation = R * p.rot;
+                inst.colorA      = cA.value_or(p.colorA);
+                inst.colorB      = cB.value_or(p.colorB);
+                std::vector<ObjectInstance> one{inst};
+                curCtx_->renderer.drawObjects(one, *impl_->meshes[p.meshHandle],
+                                              *impl_->buffers[p.meshHandle], cam4D_, camOri,
+                                              focal_, curCtx_->innerMVP, vis, nullptr, nullptr);
+            }
+        });
 
     engine.set_function("draw_polyline",
         [this](int meshH, sol::table pts, const glm::vec3& color, float width) {

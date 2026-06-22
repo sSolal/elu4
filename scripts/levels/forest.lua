@@ -33,11 +33,11 @@ function load()
   engine.controls.headReturn = false
   engine.set_scene_far(120.0, 0.30)
 
-  local rawTree = engine.load_mesh("objects/tree.json")
+  local rawTree = engine.load_mesh("assets/tree.json")
   local treeBase = engine.make_scaled(rawTree, TREE_SCALE)
   landmarkMesh = engine.make_scaled(rawTree, LM_SCALE)
-  npcMesh  = engine.make_box(vec4(0.6, 1.2, 0.6, 0.6))
-  goldMesh = engine.make_scaled(engine.make_hypercube(), 0.6)
+  npcMesh  = engine.asset_mesh(engine.load_asset("assets/npc.json"))
+  goldMesh = engine.asset_mesh(engine.load_asset("assets/gold_cube.json"))
   mergedSet = engine.instance_set(); mergedSet:add(vec4(0,0,0,0), I, vec3(1,1,1), vec3(1,1,1))
   landmarkSet, npcSet, goldSet = engine.instance_set(), engine.instance_set(), engine.instance_set()
 

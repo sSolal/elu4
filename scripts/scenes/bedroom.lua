@@ -12,6 +12,9 @@ local I = Rotor4D.identity()
 -- Every placed box is one (mesh, instance_set) pair; render() walks the list. A box
 -- is optionally registered as a solid collider so the player can't pass through it.
 local parts = {}
+-- Furniture is loaded from the shared asset library (assets/*.json) and placed at a
+-- world anchor; the room shell / corridor stay inline boxes below.
+local bedA, closetA, deskA, stoolA, windowA
 local function box(cx, cy, cz, cw, hx, hy, hz, hw, colA, colB, solid)
   local mesh = engine.make_box(vec4(hx, hy, hz, hw))
   local set  = engine.instance_set()
@@ -27,14 +30,7 @@ local FLOOR_A = vec3(0.55, 0.45, 0.35)
 local FLOOR_B = vec3(0.42, 0.34, 0.26)
 local WALL_A  = vec3(0.34, 0.37, 0.45)
 local WALL_B  = vec3(0.24, 0.27, 0.34)
-local BED_A   = vec3(0.78, 0.32, 0.32)
-local BED_B   = vec3(0.55, 0.22, 0.22)
-local WOOD_A  = vec3(0.50, 0.34, 0.20)
-local WOOD_B  = vec3(0.36, 0.24, 0.14)
-local CLOSET_A = vec3(0.38, 0.48, 0.58)
-local CLOSET_B = vec3(0.26, 0.34, 0.42)
-local GLASS    = vec3(0.58, 0.78, 0.92)
-local STOOL    = vec3(0.42, 0.42, 0.50)
+-- (furniture colours now live in the asset JSON files)
 
 local ROOM   = 5.0    -- interior half-extent in X/Z/W
 local WALL_T = 0.2    -- wall thickness (half)
@@ -97,37 +93,16 @@ function load()
     box(cMid, 2.9, 0, 0, cHalf, 0.2, CW, CW, WALL_A, WALL_B, true)
   end
 
-  -- --- Bed (against the -Z wall): mattress + headboard + 6 legs ---------------
-  box(0, 0.5, -3.4, 0, 1.6, 0.25, 0.9, 1.6, BED_A, BED_B)              -- mattress (4D: extends in W)
-  box(0, 0.95, -4.3, 0, 1.6, 0.55, 0.12, 1.6, WOOD_A, WOOD_B)         -- headboard at the wall
-  for _, lx in ipairs({ -1.4, 1.4 }) do
-    for _, lw in ipairs({ -1.4, 0, 1.4 }) do
-      box(lx, 0.125, -3.4, lw, 0.12, 0.125, 0.12, 0.12, WOOD_A, WOOD_B)  -- 6 legs down -Y
-    end
-  end
-
-  -- --- Closet (against the +Z wall): body + door face ------------------------
-  box(2.6, 1.4, 4.2, 0, 1.0, 1.4, 0.55, 1.0, CLOSET_A, CLOSET_B, true)
-  box(2.6, 1.4, 3.6, 0, 0.9, 1.2, 0.05, 0.9, GLASS, CLOSET_A)         -- door face (lighter)
-
-  -- --- Window (on the +W wall): frame + pane --------------------------------
-  box(-2.2, 1.7, 0, 4.9, 0.95, 0.65, 0.95, 0.06, WOOD_B, WOOD_A)      -- frame (darker, slightly proud)
-  box(-2.2, 1.7, 0, 4.95, 0.78, 0.5, 0.78, 0.03, GLASS, vec3(0.80, 0.92, 1.0))  -- pane
-
-  -- --- Desk + stool (against the -W wall) -----------------------------------
-  box(0, 1.0, 0, -4.0, 1.5, 0.06, 0.9, 0.45, WOOD_A, WOOD_B)          -- desk top
-  for _, lx in ipairs({ -1.4, 1.4 }) do
-    for _, lw in ipairs({ -4.4, -4.0, -3.6 }) do
-      box(lx, 0.47, 0, lw, 0.07, 0.47, 0.07, 0.07, WOOD_B, WOOD_A)    -- 6 desk legs down -Y
-    end
-  end
-  -- Stool: a square thin-in-Y seat with 4 legs spread tetrahedrally in X/Z/W.
-  box(0, 0.55, 0, -3.0, 0.4, 0.05, 0.4, 0.4, STOOL, WALL_B)
-  local legs = { { 0.3, 0.3, 0.3 }, { -0.3, -0.3, 0.3 },
-                 { -0.3, 0.3, -0.3 }, { 0.3, -0.3, -0.3 } }
-  for _, p in ipairs(legs) do
-    box(p[1], 0.25, p[2], -3.0 + p[3], 0.06, 0.25, 0.06, 0.06, STOOL, WALL_B)
-  end
+  -- --- Furniture: loaded from the shared asset library ----------------------
+  -- Each asset is authored in local space (see assets/*.json); the second arg is
+  -- the world anchor it is placed at. draw_asset (in render) draws them; the closet
+  -- body is the only solid piece, so register its collider here.
+  bedA    = engine.load_asset("assets/bed.json")     -- mattress + headboard + 6 legs (-Z wall)
+  closetA = engine.load_asset("assets/closet.json")  -- body + glass door face (+Z wall)
+  deskA   = engine.load_asset("assets/desk.json")    -- top + 6 legs (-W wall)
+  stoolA  = engine.load_asset("assets/stool.json")   -- seat + 4 tetrahedral legs
+  windowA = engine.load_asset("assets/window.json")  -- frame + pane (+W wall)
+  engine.asset_colliders(closetA, vec4(2.6, 0, 4.2, 0))
 end
 
 function update()
@@ -142,6 +117,11 @@ function render()
   for _, p in ipairs(parts) do
     engine.draw_instances(p.mesh, p.set)
   end
+  engine.draw_asset(bedA,    vec4(0, 0, -3.4, 0))
+  engine.draw_asset(closetA, vec4(2.6, 0, 4.2, 0))
+  engine.draw_asset(deskA,   vec4(0, 0, 0, -4.0))
+  engine.draw_asset(stoolA,  vec4(0, 0, 0, -3.0))
+  engine.draw_asset(windowA, vec4(-2.2, 1.7, 0, 4.9))
   engine.draw_outer_cube()
 end
 

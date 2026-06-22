@@ -1,152 +1,96 @@
-# 4D Object Visualizer
+# 4D Asset Visualizer
 
-A tool for visualizing and interacting with 4-dimensional objects using 4D→3D→2D perspective projection.
+A side tool for inspecting and editing the game's assets. It is **not** a separate
+renderer: it drives the same `Renderer::drawObjects` pipeline the game uses (per-fragment
+4D occlusion, depth cues, the W-gradient inner shader) under the same Elua UI theme, so an
+asset looks identical to how it appears in-game.
 
-## Overview
+## Running
 
-The visualizer system consists of:
+Run from the project root so `shaders/` and `assets/` resolve:
 
-1. **Object4D Format** - JSON-based format for storing 4D geometric objects
-2. **Visualizer** - Interactive program for rotating and viewing 4D objects
-3. **Object Generator** - Tool for generating test objects
+```bash
+./build/visualizer                  # opens empty — use the "Open asset..." button
+./build/visualizer assets/bed.json  # or open a file directly
+```
 
-## 4D Object Format
+The **Open asset...** button uses the native OS file dialog (tinyfiledialogs),
+defaulting to the `assets/` folder.
 
-Objects are stored as JSON files with the following structure:
+## Orbit camera
+
+The camera orbits the object: it always points at the object's centre and slides over
+the 4-sphere around it ("move laterally / up / down, but always face it").
+
+| Keys      | Orbit plane |
+|-----------|-------------|
+| `u` / `l` | ZW          |
+| `j` / `o` | XW          |
+| `i` / `k` | YW          |
+| wheel     | zoom (orbit distance) |
+| `Esc`     | quit        |
+
+### View-direction widget
+
+Top-right: four axis bars (X red, Y green, Z orange, W blue) showing the unit direction
+the camera looks **from** — which, because the camera always looks at the object, also
+gives its position. A **−** and **+** button flank each axis; clicking one snaps all the
+weight onto that axis, jumping the camera to look straight from ±X / ±Y / ±Z / ±W.
+
+### Asset panel
+
+Top-left: the asset name + part count, the **Open** button, and the shared render
+toggles — Geometry (Solid / Wire / Borders), Alpha, Depth cue, Background, the 4D
+occlusion switch, and Focal / Distance sliders.
+
+## Asset format
+
+Assets live in `assets/*.json`. An asset is a **named list of parts** in the asset's
+local space; each part is one mesh placed at a local position/orientation with two-tone
+colours. This is the single source of truth: the game loads the very same files (e.g.
+`scripts/scenes/bedroom.lua` calls `engine.load_asset("assets/bed.json")` and places it).
 
 ```json
 {
-  "name": "Object Name",
-  "vertices": [
-    [x, y, z, w],
-    ...
-  ],
-  "edges": [
-    [v0, v1],
-    ...
-  ],
-  "cells": [
-    [v0, v1, v2, v3, ...],
-    ...
+  "name": "Bed",
+  "parts": [
+    { "shape": "box", "half": [1.6, 0.25, 0.9, 1.6], "pos": [0, 0.5, 0, 0],
+      "colorA": [0.78, 0.32, 0.32], "colorB": [0.55, 0.22, 0.22] },
+    { "shape": "hypersphere", "radius": 0.5, "pos": [0, 2, 0, 0], "colorA": [0.2, 0.8, 0.3] },
+    { "shape": "mesh", "ref": "tree.json", "pos": [0, 0, 0, 0] }
   ]
 }
 ```
 
-**Components:**
-- `vertices`: Array of 4D points [x, y, z, w]
-- `edges`: Pairs of vertex indices that form 1D edges
-- `cells`: Polygons (lists of vertex indices) that form 2D faces in 4D space
+**Part fields**
 
-## Building
+- `shape`: `box` | `ground` | `hypercube` | `hypersphere` | `mesh`
+  - primitives use `half` (vec4); `hypersphere` also takes `radius`; any part may set a
+    uniform `scale`.
+  - `mesh`: explicit geometry — either inline `vertices` / `edges` / `cells` (the legacy
+    single-mesh format), or `ref` pointing at another file resolved relative to this one.
+    This is how fully vertex-defined meshes are stored (the end goal); primitives are the
+    convenient shorthand.
+- `pos` (vec4 local offset, default 0), `rot` (per-plane angles `{xy,xz,xw,yz,yw,zw}` in
+  radians, or omit for identity), `colorA` / `colorB` (vec3; `colorB` defaults to
+  `colorA`), `solid` (bool — when placed in the game, registers a collider).
 
-From the build directory:
+**Back-compat:** a file with top-level `vertices` / `edges` / `cells` and no `parts`
+(e.g. `assets/tree.json`) loads as a single mesh part.
 
-```bash
-cmake --build . --target visualizer
-cmake --build . --target generate_objects
-```
+The loader is `src/Asset.{h,cpp}` (`loadAsset`), shared by the game and the visualizer.
 
-## Running the Visualizer
+## How it shares the game pipeline
 
-### Load an object from file:
-```bash
-./visualizer ../hypercube.json
-./visualizer ../hypersphere.json
-```
+- The object instance sits at the world origin; the orbit moves a 4D camera around it.
+  Because the object's centre always projects to the 3D origin, a fixed `Camera3D` frames
+  it while the orbit rotor `Q` (passed as the camera orientation) moves the eye.
+- Each part is drawn with its own self-occluding `drawObjects` call — exactly how the game
+  draws each inline box — so occlusion, depth fog, borders, and colours all match in-game.
+- UI uses `elua::applyEluaStyle()` / `loadEluaFonts()` and the palette accessors in
+  `src/UiTheme.h`; the view widget mirrors the in-game facing gauge (`src/HudWidgets.h`).
 
-### Keyboard Controls
+## Headless capture
 
-**6 Planes of Rotation** (each plane can rotate independently):
-
-| Plane | Positive Rotation | Negative Rotation |
-|-------|-------------------|-------------------|
-| XY    | Q                 | W                 |
-| XZ    | A                 | S                 |
-| XW    | Z                 | X                 |
-| YZ    | E                 | R                 |
-| YW    | D                 | F                 |
-| ZW    | C                 | V                 |
-
-**Other Controls:**
-- `UP/DOWN` - Adjust focal length (4D perspective)
-- `1` - Toggle edge display
-- `2` - Toggle cell (face) display
-- `ESC` - Exit
-
-## Focal Length
-
-The focal length controls the perspective projection from 4D to 3D. Higher values show less perspective distortion, lower values create more extreme perspective effects.
-
-## Test Objects
-
-### Hypercube (hypercube.json)
-- 16 vertices (all ±0.5 combinations)
-- 32 edges (1D structure)
-- 24 square faces (2D cells in 4D)
-- Represents a 4-dimensional unit cube
-
-### Hypersphere (hypersphere.json)
-- 64 vertices (4×4×4 low-resolution grid on 3-sphere)
-- 144 edges (connecting adjacent grid points)
-- 81 quad faces (from grid structure)
-- Approximate 4D sphere
-
-## Generating Custom Objects
-
-The `generate_objects` program creates the test objects. To extend it:
-
-1. Create a function that populates `Object4D`
-2. Call `saveToJSON()` to write to file
-
-Example:
-```cpp
-Object4D myObject;
-myObject.name = "My Object";
-myObject.vertices.push_back(glm::vec4(0, 0, 0, 0));
-myObject.vertices.push_back(glm::vec4(1, 0, 0, 0));
-myObject.edges.push_back({0, 1});
-myObject.saveToJSON("my_object.json");
-```
-
-## Implementation Details
-
-### 4D to 3D Projection
-
-Uses perspective projection along the W axis:
-```
-f = 1.0 / (focal_length - w)
-projected_3d = (f*x, f*y, f*z)
-```
-
-This creates the characteristic "hyperbolic" appearance when rotating in 4D planes.
-
-### Rendering
-
-- Vertices are stored as 4D points
-- At each frame:
-  1. Apply 6 rotations (composition of all rotation angles)
-  2. Project 4D vertices to 3D using focal length
-  3. Render as wireframe (edges) or solid (cells)
-
-### File Structure
-
-```
-src/
-├── Object4D.h/cpp       - 4D object definition and JSON I/O
-├── visualizer_main.cpp  - Main visualizer program
-├── generate_objects.cpp - Object generation utility
-└── (reused files)
-    ├── Shader.h/cpp     - OpenGL shader management
-    ├── Camera.h/cpp     - Camera system
-    └── Math4D.h         - 4D math utilities
-
-hypercube.json         - Test hypercube object
-hypersphere.json       - Test hypersphere object
-```
-
-## Notes
-
-- Objects are rendered using OpenGL with simple wireframe/solid modes
-- The projection handles vertices behind the camera (w > -focal_length) by clamping
-- Rotating in different planes creates the classic "hypercube" unfolding effect
-- For best visualization, try slowly rotating in one or two planes at a time
+`SCREENSHOT=<path> [SHOT_FRAME=N] ./build/visualizer assets/bed.json` renders N frames
+then writes a binary PPM and exits (mirrors the game's `SCREENSHOT`), for quick checks.

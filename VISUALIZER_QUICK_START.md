@@ -1,88 +1,43 @@
-# Quick Start: 4D Object Visualizer
+# Quick Start: 4D Asset Visualizer
 
-## What Was Built
+The visualizer is a side tool for inspecting and framing the game's assets. It shares
+the game's real rendering pipeline (4D occlusion, depth cues, the W-gradient inner
+shader) and the same Elua UI theme, so what you see matches the game.
 
-Three new components have been added to your 4D game:
+## Run
 
-### 1. Object4D Format (Object4D.h/cpp)
-- JSON-based format for storing 4D objects
-- Supports vertices, edges, and cells (2D faces in 4D)
-- Load/save functionality
-
-### 2. Visualizer Program (visualizer_main.cpp)
-- Interactive 3D visualization of 4D objects
-- Rotate in all 6 independent planes
-- Real-time 4D→3D projection with focal length adjustment
-
-### 3. Object Generator (generate_objects.cpp)
-- Creates test objects: hypercube and hypersphere
-- Generates proper topology (vertices, edges, cells)
-
-## Compiled Binaries
-
-```
-build/visualizer       # Main viewer
-build/generate_objects # Object generator
-```
-
-## Test Objects Created
-
-```
-hypercube.json    - 16 vertices, 32 edges, 24 faces
-hypersphere.json  - 64 vertices, 144 edges, 81 faces
-```
-
-## Try It Now
-
-Run the visualizer with a test object:
+Always run from the project root (so `shaders/` and `assets/` resolve):
 
 ```bash
-cd /home/solste/Desktop/4DGGame/new
-./build/visualizer hypercube.json
+./run.sh            # builds everything
+./build/visualizer                 # opens empty; use "Open asset..."
+./build/visualizer assets/bed.json # or open a file directly
 ```
+
+Click **Open asset...** to pick any `assets/*.json` with the native file dialog.
 
 ## Controls
 
-**Rotation (6 planes):**
-- **Q/W** - XY plane
-- **A/S** - XZ plane
-- **Z/X** - XW plane
-- **E/R** - YZ plane
-- **D/F** - YW plane
-- **C/V** - ZW plane
+The camera **orbits the object** — it always points at it and slides over the
+4-sphere around it.
 
-**Display:**
-- **TAB** - Toggle between wireframe and translucent modes
-- **UP/DOWN** - Focal length (4D perspective)
-- **ESC** - Exit
+- **u / l** — orbit in the ZW plane
+- **j / o** — orbit in the XW plane
+- **i / k** — orbit in the YW plane
+- **mouse wheel** — zoom (orbit distance)
+- **Esc** — quit
 
-**New Features:**
-- **4D Axis Gizmo** - Real-time display of X (red), Y (green), Z (blue), W (white) axes as they rotate
-- **Wireframe Mode** - Clean edge-only visualization
-- **Translucent Mode** - Semi-transparent (30% alpha) cells showing 3D structure
+**View direction widget** (top-right): four axis bars (X/Y/Z/W) show the direction the
+camera looks *from*. The **−/+** button beside each axis snaps the camera to look
+straight from that axis (e.g. **+W** jumps to "look from +W").
 
-## What Makes This Work
+**Asset panel** (top-left): Geometry (Solid / Wire / Borders), Alpha, Depth cue,
+Background, the 4D-occlusion toggle, and Focal / Distance sliders.
 
-The system reuses your existing rendering infrastructure:
-- Shader system (GL3 shaders)
-- Camera and projection
-- Math4D utilities for coordinate transforms
-- OpenGL rendering pipeline
+## Assets
 
-The key innovation is the JSON-based object format combined with interactive 6-axis rotation in 4D space.
-
-## File Structure
-
-```
-src/
-├── Object4D.h/cpp           - Format + JSON I/O
-├── visualizer_main.cpp      - Viewer program
-├── generate_objects.cpp     - Generator utility
-└── shaders/
-    ├── visualizer.vert      - Vertex shader
-    └── visualizer.frag      - Fragment shader
-
-hypercube.json / hypersphere.json  - Test objects
-```
-
-See VISUALIZER.md for complete documentation.
+Assets live in `assets/*.json`. An asset is a list of **parts**; each part is either a
+procedural primitive (`box`, `ground`, `hypercube`, `hypersphere`) or an explicit
+vertex `mesh`, with a local position/orientation and two-tone colours. The game loads
+these same files (single source of truth — see `assets/bed.json` placed by
+`scripts/scenes/bedroom.lua`). See **VISUALIZER.md** for the full format.

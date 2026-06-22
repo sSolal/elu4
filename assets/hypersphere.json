@@ -1,0 +1,7 @@
+{
+  "name": "Hypersphere",
+  "parts": [
+    { "shape": "hypersphere", "radius": 0.5, "pos": [0, 0, 0, 0],
+      "colorA": [0.90, 0.40, 0.40], "colorB": [0.40, 0.55, 0.90] }
+  ]
+}
