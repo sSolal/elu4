@@ -14,6 +14,7 @@
 #include "ObjectBuffer.h"
 #include "Scene.h"
 #include "primitives.h"
+#include "mesh_merge.h"
 #include "HudWidgets.h"
 #include "RenderSettings.h"
 #include "lua/LuaBindings.h"
@@ -136,6 +137,13 @@ ScriptedLevel::~ScriptedLevel() {
         if (b) b->destroy();
 }
 
+RenderSettings ScriptedLevel::currentVis() const {
+    RenderSettings vis = curCtx_->vis;
+    if (hasSceneOverride_) vis = largeScene(vis, sceneFar_, sceneMaxFog_);
+    if (depthOverride_ >= 0) vis.depth = (DepthCue)depthOverride_;
+    return vis;
+}
+
 void ScriptedLevel::load() {
     sol::state& L = impl_->lua;
     L.open_libraries(sol::lib::base, sol::lib::math, sol::lib::string,
@@ -215,6 +223,7 @@ void ScriptedLevel::buildEngineTable() {
     // --- Shared state (bound by reference: scripts mutate the real objects) ------
     engine["cam4d"]    = &cam4D_;
     engine["cam3d"]    = &cam3D_;
+    engine["avatar"]   = &avatar_;
     engine["body"]     = &body_;
     engine["world"]    = &world_;
     engine["controls"] = &controls_;
@@ -230,7 +239,7 @@ void ScriptedLevel::buildEngineTable() {
         "E", GLFW_KEY_E, "A", GLFW_KEY_A, "Q", GLFW_KEY_Q, "D", GLFW_KEY_D,
         "W", GLFW_KEY_W, "S", GLFW_KEY_S, "J", GLFW_KEY_J, "O", GLFW_KEY_O,
         "U", GLFW_KEY_U, "L", GLFW_KEY_L, "I", GLFW_KEY_I, "K", GLFW_KEY_K,
-        "SPACE", GLFW_KEY_SPACE, "TAB", GLFW_KEY_TAB);
+        "H", GLFW_KEY_H, "SPACE", GLFW_KEY_SPACE, "TAB", GLFW_KEY_TAB);
 
     engine["hyper_mesh"] = kHyperMeshHandle;
 
@@ -256,6 +265,21 @@ void ScriptedLevel::buildEngineTable() {
         sceneFar_    = far;
         sceneMaxFog_ = maxFog;
     });
+    // Override the depth cue (e.g. "normal" turns the distance fog off so far
+    // beacons stay vivid). Names match RenderSettings::DepthCue.
+    engine.set_function("set_depth_cue", [this](const std::string& name) {
+        if      (name == "fog")    depthOverride_ = (int)DepthCue::Fog;
+        else if (name == "normal") depthOverride_ = (int)DepthCue::Normal;
+        else if (name == "darken") depthOverride_ = (int)DepthCue::DarkenFar;
+        else                       depthOverride_ = -1;
+    });
+
+    // Drive the avatar (second camera) + physics body with the shared FPS input
+    // path, for third-person levels. Update-only. cam4D_ stays the follow cam.
+    engine.set_function("drive_avatar", [this]() {
+        if (curCtx_)
+            avatar_.processInput(curCtx_->window, curCtx_->dt, body_, world_, controls_);
+    });
 
     // --- Per-frame queries (valid only inside a hook) ----------------------------
     engine.set_function("dt", [this]() -> float {
@@ -263,6 +287,9 @@ void ScriptedLevel::buildEngineTable() {
     });
     engine.set_function("inside_mode", [this]() -> bool {
         return curCtx_ ? curCtx_->insideMode : false;
+    });
+    engine.set_function("time", [this]() -> float {
+        return curCtx_ ? curCtx_->vis.time : 0.0f;  // accumulated seconds (for pulses)
     });
     engine.set_function("aspect", [this]() -> float {
         if (!curCtx_) return 1.0f;
@@ -298,6 +325,56 @@ void ScriptedLevel::buildEngineTable() {
     engine.set_function("make_polyline", [addMesh](int points) {
         return addMesh(generatePolyline(points));
     });
+    // Load a 4D mesh from a project JSON asset (e.g. "objects/tree.json").
+    engine.set_function("load_mesh", [addMesh](const std::string& path) {
+        Object4D m;
+        m.loadFromJSON(path);
+        return addMesh(std::move(m));
+    });
+    // Uniformly scale an existing mesh (all four axes) into a new mesh handle.
+    engine.set_function("make_scaled", [this, addMesh](int handle, float f) {
+        if (handle < 0 || handle >= (int)impl_->meshes.size())
+            return -1;
+        Object4D m = *impl_->meshes[handle];
+        for (auto& v : m.vertices) v *= f;
+        for (auto& d : m.hullD)    d *= f;
+        return addMesh(std::move(m));
+    });
+    // Bake a set of placed instances of a base mesh into ONE static mesh (mesh_merge.h):
+    // for non-occluding scenery (floors, forests) this collapses N draws into one.
+    engine.set_function("make_merged",
+        [this, addMesh](int baseHandle, InstanceSet& set, sol::optional<bool> occludes) {
+            if (baseHandle < 0 || baseHandle >= (int)impl_->meshes.size())
+                return -1;
+            return addMesh(mergeInstances(*impl_->meshes[baseHandle], set.items,
+                                          occludes.value_or(false)));
+        });
+    // Build a raw mesh from explicit geometry: vertices (list of vec4), triangles
+    // (flat list of 0-based vertex indices), optional per-vertex colors (list of
+    // vec3), and an occludes flag. Used for procedural surfaces (e.g. terrain).
+    engine.set_function("make_mesh", [this, addMesh](sol::table spec) {
+        Object4D m;
+        m.name = "ScriptedMesh";
+        m.occludes = spec.get_or("occludes", false);
+        sol::table verts = spec["vertices"];
+        size_t nv = verts.size();
+        m.vertices.reserve(nv);
+        for (size_t i = 1; i <= nv; ++i) m.vertices.push_back(verts.get<glm::vec4>(i));
+        sol::optional<sol::table> colors = spec["colors"];
+        if (colors) {
+            m.vertexColors.reserve(nv);
+            for (size_t i = 1; i <= nv; ++i)
+                m.vertexColors.push_back(colors->get<glm::vec3>(i));
+        }
+        sol::optional<sol::table> tris = spec["triangles"];
+        if (tris) {
+            size_t nt = tris->size();
+            m.triangleIndices.reserve(nt);
+            for (size_t i = 1; i <= nt; ++i)
+                m.triangleIndices.push_back((unsigned)tris->get<int>(i));
+        }
+        return addMesh(std::move(m));
+    });
 
     engine.set_function("instance_set", []() { return InstanceSet{}; });
 
@@ -326,9 +403,7 @@ void ScriptedLevel::buildEngineTable() {
             occInsts = &occ->items;
             occObj   = impl_->meshes[occH].get();
         }
-        RenderSettings vis = hasSceneOverride_
-            ? largeScene(curCtx_->vis, sceneFar_, sceneMaxFog_)
-            : curCtx_->vis;
+        RenderSettings vis = currentVis();
         Math4D::Rotor4D ori = cam4D_.getOrientation();
         curCtx_->renderer.drawObjects(set.items, *mesh, *buf, cam4D_, ori, focal_,
                                       curCtx_->innerMVP, vis, occInsts, occObj);
@@ -357,9 +432,7 @@ void ScriptedLevel::buildEngineTable() {
             mesh.vertices.assign(n, glm::vec4(0.0f));
             for (size_t i = 0; i < n; ++i)
                 mesh.vertices[i] = pts[i + 1];  // Lua arrays are 1-based
-            RenderSettings vis = hasSceneOverride_
-                ? largeScene(curCtx_->vis, sceneFar_, sceneMaxFog_)
-                : curCtx_->vis;
+            RenderSettings vis = currentVis();
             Math4D::Rotor4D ori = cam4D_.getOrientation();
             curCtx_->renderer.drawPolyline(mesh, buf, cam4D_, ori, focal_,
                                            curCtx_->innerMVP, vis, color, width);
@@ -373,6 +446,18 @@ void ScriptedLevel::buildEngineTable() {
         }
         curCtx_->renderer.drawOuterCube(curCtx_->outerMVP);
     });
+
+    // Draw a screen-facing dot at a 3D point projected with the inner-scene MVP
+    // (constant on-screen size). Used for direction hints on the inner cube face.
+    engine.set_function("draw_marker",
+        [this](const glm::vec3& center, float sizeNDC, const glm::vec3& color, float alpha) {
+            if (!curCtx_) return;
+            float aspect = 1.0f;
+            const glm::mat4& p = curCtx_->projection;
+            if (p[0][0] != 0.0f) aspect = p[1][1] / p[0][0];
+            curCtx_->renderer.drawMarker(center, sizeNDC, aspect, color, alpha,
+                                         curCtx_->innerMVP);
+        });
 
     // --- HUD widgets (render_hud hook only) -------------------------------------
     engine.set_function("hud_window", [](const std::string& title, sol::table lines) {

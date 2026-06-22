@@ -63,6 +63,20 @@ const std::vector<LevelEntry>& levelRegistry() {
             [] { return std::unique_ptr<Level>(
                 new ScriptedLevel("scripts/levels/maze.lua", "9L - Maze (Lua)")); }});
 
+        // The rest of the campaign, ported to Lua (run alongside the C++ originals).
+        auto scripted = [](const char* path, const char* label) {
+            return LevelEntry{label, true,
+                [path, label] { return std::unique_ptr<Level>(new ScriptedLevel(path, label)); }};
+        };
+        r.push_back(scripted("scripts/levels/corridor.lua",    "1L - Corridor (Lua)"));
+        r.push_back(scripted("scripts/levels/dodgeball.lua",   "2L - Dodgeball (Lua)"));
+        r.push_back(scripted("scripts/levels/turnface.lua",    "3L - Turn & Face (Lua)"));
+        r.push_back(scripted("scripts/levels/thirdperson.lua", "4L - Third Person (Lua)"));
+        r.push_back(scripted("scripts/levels/leap.lua",        "5L - Leap (Lua)"));
+        r.push_back(scripted("scripts/levels/plane4d.lua",     "7L - Plane 4D (Lua)"));
+        r.push_back(scripted("scripts/levels/forest.lua",      "8L - Forest Fetch (Lua)"));
+        r.push_back(scripted("scripts/levels/bigvista.lua",    "10L - Big Vista (Lua)"));
+
         return r;
     }();
 

@@ -53,6 +53,16 @@ private:
     bool  hasSceneOverride_ = false;
     float sceneFar_    = 0.0f;
     float sceneMaxFog_ = 0.0f;
+    int   depthOverride_ = -1;  // engine.set_depth_cue: -1 = none, else DepthCue value
+
+    // A second camera the script can drive with the shared FPS input path
+    // (engine.drive_avatar) for third-person levels: it steers this avatar + the
+    // physics body while the inherited cam4D_ is recomputed as the follow cam.
+    Camera4D avatar_;
+
+    // The per-frame RenderSettings the draw calls use (global vis + this level's
+    // scene-far / depth-cue overrides). Valid only while curCtx_ is set.
+    RenderSettings currentVis() const;
 
     // Builds the `engine` table into impl_->lua. Declared here (no sol types in the
     // signature) and defined in the .cpp alongside the bindings.
