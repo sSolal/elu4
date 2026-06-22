@@ -26,6 +26,7 @@ public:
     bool checkWin() const override { return won_; }
     void renderHUD(const LevelContext& ctx) override;
     void onInteract() override;
+    std::string takeSceneRequest() override;
 
 private:
     struct Impl;                 // holds sol::state + captured hook handles
@@ -41,6 +42,10 @@ private:
 
     bool won_   = false;  // flipped by engine.set_won()
     bool inert_ = false;  // a script error puts the level in a safe no-op state
+
+    // Set by engine.goto_scene(name); the runner polls takeSceneRequest() after
+    // update() and swaps to the named scene. Empty when no transition is pending.
+    std::string pendingScene_;
 
     // When true (script sets engine.use_standard_input(true) in load), the host
     // runs the shared Level::runCameraInput before each Lua update(). Default off:

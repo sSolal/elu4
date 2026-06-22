@@ -213,6 +213,12 @@ void ScriptedLevel::onInteract() {
     callHook(impl_->fnInteract, "on_interact", displayName_);
 }
 
+std::string ScriptedLevel::takeSceneRequest() {
+    std::string req = pendingScene_;
+    pendingScene_.clear();
+    return req;
+}
+
 // ---------------------------------------------------------------------------
 // The `engine` table — the full surface level scripts drive the engine through.
 // ---------------------------------------------------------------------------
@@ -249,6 +255,13 @@ void ScriptedLevel::buildEngineTable() {
     });
     engine.set_function("set_won", [this]() { won_ = true; });
     engine.set_function("use_standard_input", [this](bool on) { standardInput_ = on; });
+
+    // Request a transition to another scene (scripts/scenes/<name>.lua). Only
+    // records the name; the runner performs the swap after update() returns, so
+    // the current scene tears down cleanly between frames.
+    engine.set_function("goto_scene", [this](const std::string& name) {
+        pendingScene_ = name;
+    });
 
     engine.set_function("set_focal", [this](float f) { focal_ = f; });
     engine.set_function("get_focal", [this]() { return focal_; });

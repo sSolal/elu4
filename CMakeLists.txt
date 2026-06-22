@@ -41,17 +41,6 @@ add_executable(game
     src/UiTheme.cpp
     src/MenuBackground.cpp
     src/LevelRegistry.cpp
-    src/levels/CorridorLevel.cpp
-    src/levels/DodgeballLevel.cpp
-    src/levels/TurnAndFaceLevel.cpp
-    src/levels/Level4ThirdPerson.cpp
-    src/levels/LeapLevel.cpp
-    src/levels/PlaneLevel.cpp
-    src/levels/PlaneLevel4D.cpp
-    src/levels/ForestFetchLevel.cpp
-    src/levels/MazeLevel.cpp
-    src/levels/BigVistaLevel.cpp
-    src/levels/StubLevel.cpp
     src/levels/ScriptedLevel.cpp
     src/lua/LuaBindings.cpp
     src/imgui/imgui.cpp

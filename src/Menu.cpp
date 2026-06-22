@@ -66,13 +66,33 @@ int Menu::drawLevelPanel(float winW, float winH, float contentTop) {
     int selected = -1;
 
     const float listW = 384.0f;
-    // Fill the space between the title and the Credits button + footer so the
-    // panel never spills past the window bottom (it scrolls internally instead).
-    float listH = winH - contentTop - 92.0f;
-    if (listH > 430.0f) listH = 430.0f;
-    if (listH < 170.0f) listH = 170.0f;
 
+    // Primary action: "Start game" — a prominent lamp-amber button above the dev
+    // level list. Clicking it returns the kStartGame sentinel so the runner boots
+    // the first game scene instead of a registry level.
+    const float startBtnH = 52.0f;
+    const float startBlock = startBtnH + 18.0f;  // button height + gap below it
     ImGui::SetCursorPos(ImVec2((winW - listW) * 0.5f, contentTop));
+    const ImVec4 lamp = elua::colLamp();
+    ImGui::PushStyleColor(ImGuiCol_Button,        lamp);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, elua::colLampBright());
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  lamp);
+    ImGui::PushStyleColor(ImGuiCol_Text,          elua::colNight800());
+    if (elua::fontHeading()) ImGui::PushFont(elua::fontHeading());
+    bool startClicked = ImGui::Button("Start game", ImVec2(listW, startBtnH));
+    if (elua::fontHeading()) ImGui::PopFont();
+    ImGui::PopStyleColor(4);
+    if (startClicked) return Menu::kStartGame;
+
+    const float listTop = contentTop + startBlock;
+
+    // Fill the space between the Start button and the Credits button + footer so
+    // the panel never spills past the window bottom (it scrolls internally instead).
+    float listH = winH - listTop - 92.0f;
+    if (listH > 380.0f) listH = 380.0f;
+    if (listH < 150.0f) listH = 150.0f;
+
+    ImGui::SetCursorPos(ImVec2((winW - listW) * 0.5f, listTop));
     ImGui::PushStyleColor(ImGuiCol_ChildBg, elua::colPanel());
     ImGui::BeginChild("levellist", ImVec2(listW, listH), true);
 
@@ -107,7 +127,7 @@ int Menu::drawLevelPanel(float winW, float winH, float contentTop) {
 
     // Credits button, centered under the panel.
     const float btnW = 168.0f;
-    ImGui::SetCursorPos(ImVec2((winW - btnW) * 0.5f, contentTop + listH + 16.0f));
+    ImGui::SetCursorPos(ImVec2((winW - btnW) * 0.5f, listTop + listH + 16.0f));
     if (ImGui::Button("Credits", ImVec2(btnW, 36.0f)))
         showCredits = true;
 

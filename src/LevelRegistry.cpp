@@ -1,84 +1,37 @@
 #include "LevelRegistry.h"
 
-#include "levels/CorridorLevel.h"
-#include "levels/DodgeballLevel.h"
-#include "levels/TurnAndFaceLevel.h"
-#include "levels/Level4ThirdPerson.h"
-#include "levels/LeapLevel.h"
-#include "levels/PlaneLevel.h"
-#include "levels/PlaneLevel4D.h"
-#include "levels/ForestFetchLevel.h"
-#include "levels/MazeLevel.h"
-#include "levels/BigVistaLevel.h"
 #include "levels/ScriptedLevel.h"
 
 const std::vector<LevelEntry>& levelRegistry() {
-    // Built once on first call. Index 0 is the fully-playable Corridor; the rest
-    // are placeholders whose design lives in docs/levels/ and which will be built
-    // out one at a time.
+    // The campaign, in teaching order. Every level is a Lua script under
+    // scripts/levels/ run through ScriptedLevel — the original C++ level classes
+    // were removed once the port was complete (the engine now runs entirely on the
+    // scripting layer; the game proper lives in scripts/scenes/). Built once on
+    // first call; each entry constructs its ScriptedLevel lazily on selection.
     static const std::vector<LevelEntry> registry = [] {
-        std::vector<LevelEntry> r;
-
-        r.push_back({"1 - Corridor", true,
-            [] { return std::unique_ptr<Level>(new CorridorLevel()); }});
-
-        r.push_back({"2 - Dodgeball", true,
-            [] { return std::unique_ptr<Level>(new DodgeballLevel()); }});
-
-        r.push_back({"3 - Turn & Face", true,
-            [] { return std::unique_ptr<Level>(new TurnAndFaceLevel()); }});
-
-        r.push_back({"4 - Third Person", true,
-            [] { return std::unique_ptr<Level>(new Level4ThirdPerson()); }});
-
-        r.push_back({"5 - Leap", true,
-            [] { return std::unique_ptr<Level>(new LeapLevel()); }});
-
-
-        r.push_back({"6 - Plane (3D-like)", true,
-            [] { return std::unique_ptr<Level>(new PlaneLevel()); }});
-
-        r.push_back({"7 - Plane (4D course)", true,
-            [] { return std::unique_ptr<Level>(new PlaneLevel4D()); }});
-
-        r.push_back({"8 - Forest Fetch", true,
-            [] { return std::unique_ptr<Level>(new ForestFetchLevel()); }});
-
-        r.push_back({"9 - Maze", true,
-            [] { return std::unique_ptr<Level>(new MazeLevel()); }});
-
-        r.push_back({"10 - Big Vista", true,
-            [] { return std::unique_ptr<Level>(new BigVistaLevel()); }});
-
-        // --- Lua-scripted levels (run alongside the C++ ones during migration) ---
-        r.push_back({"H - Hello (Lua)", true,
-            [] { return std::unique_ptr<Level>(
-                new ScriptedLevel("scripts/levels/hello.lua", "H - Hello (Lua)")); }});
-
-        r.push_back({"6L - Plane (Lua)", true,
-            [] { return std::unique_ptr<Level>(
-                new ScriptedLevel("scripts/levels/plane.lua", "6L - Plane (Lua)")); }});
-
-        r.push_back({"9L - Maze (Lua)", true,
-            [] { return std::unique_ptr<Level>(
-                new ScriptedLevel("scripts/levels/maze.lua", "9L - Maze (Lua)")); }});
-
-        // The rest of the campaign, ported to Lua (run alongside the C++ originals).
         auto scripted = [](const char* path, const char* label) {
             return LevelEntry{label, true,
                 [path, label] { return std::unique_ptr<Level>(new ScriptedLevel(path, label)); }};
         };
-        r.push_back(scripted("scripts/levels/corridor.lua",    "1L - Corridor (Lua)"));
-        r.push_back(scripted("scripts/levels/dodgeball.lua",   "2L - Dodgeball (Lua)"));
-        r.push_back(scripted("scripts/levels/turnface.lua",    "3L - Turn & Face (Lua)"));
-        r.push_back(scripted("scripts/levels/thirdperson.lua", "4L - Third Person (Lua)"));
-        r.push_back(scripted("scripts/levels/leap.lua",        "5L - Leap (Lua)"));
-        r.push_back(scripted("scripts/levels/plane4d.lua",     "7L - Plane 4D (Lua)"));
-        r.push_back(scripted("scripts/levels/forest.lua",      "8L - Forest Fetch (Lua)"));
-        r.push_back(scripted("scripts/levels/bigvista.lua",    "10L - Big Vista (Lua)"));
 
+        std::vector<LevelEntry> r;
+        r.push_back(scripted("scripts/levels/corridor.lua",    "1 - Corridor"));
+        r.push_back(scripted("scripts/levels/dodgeball.lua",   "2 - Dodgeball"));
+        r.push_back(scripted("scripts/levels/turnface.lua",    "3 - Turn & Face"));
+        r.push_back(scripted("scripts/levels/thirdperson.lua", "4 - Third Person"));
+        r.push_back(scripted("scripts/levels/leap.lua",        "5 - Leap"));
+        r.push_back(scripted("scripts/levels/plane.lua",       "6 - Plane (3D-like)"));
+        r.push_back(scripted("scripts/levels/plane4d.lua",     "7 - Plane (4D course)"));
+        r.push_back(scripted("scripts/levels/forest.lua",      "8 - Forest Fetch"));
+        r.push_back(scripted("scripts/levels/maze.lua",        "9 - Maze"));
+        r.push_back(scripted("scripts/levels/bigvista.lua",    "10 - Big Vista"));
         return r;
     }();
 
     return registry;
+}
+
+std::unique_ptr<Level> makeScene(const std::string& sceneName) {
+    std::string path = "scripts/scenes/" + sceneName + ".lua";
+    return std::unique_ptr<Level>(new ScriptedLevel(path, sceneName));
 }

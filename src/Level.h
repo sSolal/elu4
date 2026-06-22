@@ -3,6 +3,7 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
+#include <string>
 
 #include "Camera.h"
 #include "physics.h"
@@ -66,6 +67,11 @@ public:
 
     // Space-to-interact hook.
     virtual void onInteract() {}
+
+    // Scene-graph hook: a level (e.g. a Lua scene) may ask the runner to swap to
+    // another scene. Returns the requested scene name and clears the request, or
+    // "" if none. C++ levels never request a transition (default empty).
+    virtual std::string takeSceneRequest() { return {}; }
 
     // The runner needs these to drive the outer-cube camera and focal length.
     Camera3D& cam3D()       { return cam3D_; }

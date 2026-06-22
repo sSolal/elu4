@@ -17,3 +17,7 @@ struct LevelEntry {
 
 // The campaign, in teaching order. Defined in LevelRegistry.cpp.
 const std::vector<LevelEntry>& levelRegistry();
+
+// Construct a game scene by name, running scripts/scenes/<sceneName>.lua. Used by
+// the menu's "Start game" button and by engine.goto_scene() transitions.
+std::unique_ptr<Level> makeScene(const std::string& sceneName);
