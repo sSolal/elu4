@@ -31,7 +31,7 @@ const std::vector<LevelEntry>& levelRegistry() {
     return registry;
 }
 
-std::unique_ptr<Level> makeScene(const std::string& sceneName) {
+std::unique_ptr<Level> makeScene(const std::string& sceneName, SaveGame* save) {
     std::string path = "scripts/scenes/" + sceneName + ".lua";
-    return std::unique_ptr<Level>(new ScriptedLevel(path, sceneName));
+    return std::unique_ptr<Level>(new ScriptedLevel(path, sceneName, save));
 }

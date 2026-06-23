@@ -18,6 +18,7 @@
 #include "Asset.h"
 #include "HudWidgets.h"
 #include "RenderSettings.h"
+#include "SaveGame.h"
 #include "lua/LuaBindings.h"
 
 namespace {
@@ -113,6 +114,23 @@ void bindEngineTypes(sol::state& L) {
         "size", [](InstanceSet& s) { return (int)s.items.size(); });
 }
 
+// Convert a Lua value to a SaveValue. Booleans MUST be tested before numbers:
+// a Lua boolean also satisfies is<double>() via sol's coercion path, so checking
+// numbers first would silently store `true` as 1.0. Unsupported types (tables,
+// nil, functions) collapse to an empty string — scenes are documented to persist
+// only flat scalars.
+SaveValue luaToSave(const sol::object& o) {
+    if (o.is<bool>())             return o.as<bool>();
+    if (o.is<double>())           return o.as<double>();
+    if (o.is<std::string>())      return o.as<std::string>();
+    return std::string();
+}
+
+// Convert a SaveValue back to a Lua value in the given state.
+sol::object saveToLua(sol::state_view L, const SaveValue& v) {
+    return std::visit([&](auto&& x) { return sol::make_object(L, x); }, v);
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -122,6 +140,7 @@ void bindEngineTypes(sol::state& L) {
 struct ScriptedLevel::Impl {
     sol::state lua;
     sol::protected_function fnLoad, fnUpdate, fnRender, fnCheckWin, fnHud, fnInteract;
+    sol::protected_function fnSave, fnRestore;  // optional persistence hooks
 
     std::vector<std::unique_ptr<Object4D>>     meshes;
     std::vector<std::unique_ptr<ObjectBuffer>> buffers;
@@ -145,10 +164,12 @@ struct ScriptedLevel::Impl {
     std::vector<glm::vec3>   trail;  // map space (W -> vertical), owned here
 };
 
-ScriptedLevel::ScriptedLevel(std::string scriptPath, std::string displayName)
+ScriptedLevel::ScriptedLevel(std::string scriptPath, std::string displayName,
+                             SaveGame* save)
     : impl_(new Impl()),
       scriptPath_(std::move(scriptPath)),
-      displayName_(std::move(displayName)) {}
+      displayName_(std::move(displayName)),
+      save_(save) {}
 
 ScriptedLevel::~ScriptedLevel() {
     // GL context is still current at level teardown (the runner resets the level
@@ -189,8 +210,29 @@ void ScriptedLevel::load() {
     impl_->fnCheckWin = L["check_win"];
     impl_->fnHud      = L["render_hud"];
     impl_->fnInteract = L["on_interact"];
+    impl_->fnSave     = L["save"];     // optional: returns a flat table to persist
+    impl_->fnRestore  = L["restore"];  // optional: receives the persisted blob
 
     if (!callHook(impl_->fnLoad, "load", displayName_)) inert_ = true;
+
+    // Hand the scene its previously-saved private blob (if any) AFTER load() has
+    // built the world and set its baseline controls/spawn, so restore() overrides
+    // a known-good state. Most scenes drive resume via save_get inside load() and
+    // omit restore() entirely; it's here for scenes with richer state to rehydrate.
+    if (!inert_ && impl_->fnRestore.valid() && save_) {
+        auto it = save_->sceneBlobs.find(displayName_);
+        sol::table blob = impl_->lua.create_table();
+        if (it != save_->sceneBlobs.end())
+            for (const auto& [k, v] : it->second)
+                blob[k] = saveToLua(impl_->lua, v);
+        sol::protected_function_result r = impl_->fnRestore(blob);
+        if (!r.valid()) {
+            sol::error err = r;
+            std::fprintf(stderr, "[ScriptedLevel %s] error in restore(): %s\n",
+                         displayName_.c_str(), err.what());
+            inert_ = true;
+        }
+    }
     loaded_ = true;
 }
 
@@ -239,6 +281,27 @@ std::string ScriptedLevel::takeSceneRequest() {
     return req;
 }
 
+void ScriptedLevel::writeAutosave(SaveGame& sg) const {
+    sg.currentScene = displayName_;
+    // Pull this scene's private blob from its optional save() hook (a flat table).
+    if (inert_ || !impl_->fnSave.valid()) return;
+    sol::protected_function_result r = impl_->fnSave();
+    if (!r.valid()) {
+        sol::error err = r;
+        std::fprintf(stderr, "[ScriptedLevel %s] error in save(): %s\n",
+                     displayName_.c_str(), err.what());
+        return;
+    }
+    sol::object o = r;
+    if (!o.is<sol::table>()) return;
+    std::map<std::string, SaveValue> blob;
+    for (const auto& kv : o.as<sol::table>()) {
+        if (kv.first.is<std::string>())  // flat scalar keys only
+            blob[kv.first.as<std::string>()] = luaToSave(kv.second);
+    }
+    sg.sceneBlobs[displayName_] = std::move(blob);
+}
+
 // ---------------------------------------------------------------------------
 // The `engine` table — the full surface level scripts drive the engine through.
 // ---------------------------------------------------------------------------
@@ -282,6 +345,23 @@ void ScriptedLevel::buildEngineTable() {
     engine.set_function("goto_scene", [this](const std::string& name) {
         pendingScene_ = name;
     });
+
+    // --- Persistence: the shared cross-scene flat store --------------------------
+    // save_set writes a scalar (number/bool/string) under `key`; save_get reads it
+    // back, returning `def` when absent. This same store carries the "entry" key
+    // that tells a destination scene which corridor the player came through, so
+    // spawn placement survives both transitions and quit/Continue. No-ops without a
+    // SaveGame (dev levels), so scenes can call these unconditionally.
+    engine.set_function("save_set", [this](const std::string& key, sol::object v) {
+        if (save_) save_->shared[key] = luaToSave(v);
+    });
+    engine.set_function("save_get",
+        [this](const std::string& key, sol::object def) -> sol::object {
+            if (!save_) return def;
+            auto it = save_->shared.find(key);
+            if (it == save_->shared.end()) return def;
+            return saveToLua(impl_->lua, it->second);
+        });
 
     engine.set_function("set_focal", [this](float f) { focal_ = f; });
     engine.set_function("get_focal", [this]() { return focal_; });

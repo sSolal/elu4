@@ -5,6 +5,8 @@
 
 #include "Level.h"
 
+struct SaveGame;  // fwd — defined in SaveGame.h
+
 // A single generic Level that runs a Lua script. The script defines the per-level
 // logic as global functions (load/update/render/check_win/render_hud/on_interact)
 // and drives the engine through the `engine` table bound in ScriptedLevel.cpp.
@@ -15,7 +17,8 @@
 // no scripting headers and stays cheap to include from the registry.
 class ScriptedLevel : public Level {
 public:
-    ScriptedLevel(std::string scriptPath, std::string displayName);
+    ScriptedLevel(std::string scriptPath, std::string displayName,
+                  SaveGame* save = nullptr);
     ~ScriptedLevel() override;
 
     const char* name() const override { return displayName_.c_str(); }
@@ -27,6 +30,7 @@ public:
     void renderHUD(const LevelContext& ctx) override;
     void onInteract() override;
     std::string takeSceneRequest() override;
+    void writeAutosave(SaveGame& sg) const override;
 
 private:
     struct Impl;                 // holds sol::state + captured hook handles
@@ -34,6 +38,11 @@ private:
 
     std::string scriptPath_;
     std::string displayName_;
+
+    // Persistent save state, shared across scenes and owned by the runner (not us).
+    // Backs engine.save_get/save_set and is read by writeAutosave(). Null for dev
+    // levels (the menu's level list), which never persist.
+    SaveGame* save_ = nullptr;
 
     // Per-frame context, valid only for the duration of one forwarded hook. The
     // engine free-functions bound to Lua read it; they error if it is null (i.e.

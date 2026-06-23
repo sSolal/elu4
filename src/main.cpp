@@ -17,6 +17,7 @@
 #include "Renderer.h"
 #include "Level.h"
 #include "LevelRegistry.h"
+#include "SaveGame.h"
 #include "RenderSettings.h"
 #include "VR.h"
 #include "VRPanel.h"
@@ -167,6 +168,15 @@ static std::vector<EyeView> buildDesktopEyes(int fbW, int fbH,
             {hw, 0, fbW - hw, fbH, rView, proj}};
 }
 
+// Capture the active scene's resumable state and write the save file. Called from
+// both runner loops (desktop + VR) on a timer, on every scene transition, on the
+// way back to the menu, and at shutdown — factored out so the two loops persist
+// identically. No-op-safe with a null level.
+static void flushSave(SaveGame& save, const std::string& path, Level* level) {
+    if (level) level->writeAutosave(save);
+    writeSaveGame(path, save);
+}
+
 int main(int argc, char** argv) {
     // --fake-stereo: render two side-by-side eyes on the desktop (a VR-stereo
     // stand-in) instead of one mono view. Default (no flag) is mono, which is
@@ -239,6 +249,16 @@ int main(int argc, char** argv) {
     // Create game systems
     GameState state = GameState::MENU;
     Menu menu;
+
+    // Persistent save state. Loaded once at startup; `hasSave` decides whether the
+    // menu offers Continue/Restart (vs. Start). `inCampaign` is true only while
+    // playing a story scene (Start/Continue/Restart or a goto_scene transition) —
+    // it gates autosave so picking a dev level from the list never clobbers the
+    // campaign save.
+    SaveGame    save;
+    std::string savePath   = defaultSavePath();
+    bool        hasSave    = loadSaveGame(savePath, save);
+    bool        inCampaign = false;
     // Shared hypercube mesh for marker/goal cubes, on the single tetrahedral render
     // path. Sized to the historical Tesseract::HS so markers keep their look.
     Object4D hyperMesh = generateBox(glm::vec4(kHyperHalf));
@@ -269,6 +289,7 @@ int main(int argc, char** argv) {
 
     float deltaTime = 0.0f;
     float lastFrame = 0.0f;
+    float saveAccum = 0.0f;   // seconds since the last periodic autosave
 
 #ifdef HAVE_OPENXR
     // ---- VR path (Route A) ----------------------------------------------
@@ -308,7 +329,10 @@ int main(int argc, char** argv) {
 
                 // Esc: leave a level back to the menu, or quit from the menu.
                 if (edge(GLFW_KEY_ESCAPE, escWas)) {
-                    if (vrState == GameState::IN_LEVEL) { level.reset(); vrState = GameState::MENU; }
+                    if (vrState == GameState::IN_LEVEL) {
+                        if (inCampaign) { flushSave(save, savePath, level.get()); hasSave = true; }
+                        level.reset(); inCampaign = false; vrState = GameState::MENU;
+                    }
                     else break;
                 }
 
@@ -320,7 +344,10 @@ int main(int argc, char** argv) {
                 // In-level hotkeys + update (same controls as the desktop loop).
                 if (vrState == GameState::IN_LEVEL && level) {
                     if (edge(GLFW_KEY_TAB, tabWas))       insideMode = !insideMode;
-                    if (edge(GLFW_KEY_BACKSPACE, backWas)) { level.reset(); vrState = GameState::MENU; }
+                    if (edge(GLFW_KEY_BACKSPACE, backWas)) {
+                        if (inCampaign) { flushSave(save, savePath, level.get()); hasSave = true; }
+                        level.reset(); inCampaign = false; vrState = GameState::MENU;
+                    }
                 }
                 if (vrState == GameState::IN_LEVEL && level) {
                     if (edge(GLFW_KEY_P,pW)) vis.geom =(GeomMode)(((int)vis.geom +1)%3);
@@ -343,14 +370,25 @@ int main(int argc, char** argv) {
                     {
                         std::string next = level->takeSceneRequest();
                         if (!next.empty()) {
-                            level = makeScene(next);
+                            level = makeScene(next, &save);
                             level->load();
                             obsV0 = level->cam3D().getViewMatrix();
+                            if (inCampaign) { flushSave(save, savePath, level.get()); hasSave = true; }
                             std::cout << "[VR] scene -> " << level->name() << std::endl;
                         }
                     }
                     vis.time += deltaTime;
-                    if (level->checkWin()) { level.reset(); vrState = GameState::MENU; }
+                    if (inCampaign) {
+                        saveAccum += deltaTime;
+                        if (saveAccum >= 10.0f) {
+                            flushSave(save, savePath, level.get());
+                            hasSave = true; saveAccum = 0.0f;
+                        }
+                    }
+                    if (level->checkWin()) {
+                        if (inCampaign) { flushSave(save, savePath, level.get()); hasSave = true; }
+                        level.reset(); inCampaign = false; vrState = GameState::MENU;
+                    }
                 }
 
                 // ---- Build the ImGui canvas for this frame (menu or HUD) ----
@@ -359,11 +397,22 @@ int main(int argc, char** argv) {
                 vio.DisplaySize = ImVec2((float)panel.width(), (float)panel.height());
                 ImGui::NewFrame();
                 if (vrState == GameState::MENU) {
-                    int sel = menu.renderMainMenu();
-                    if (sel == Menu::kStartGame || sel >= 0) {
-                        level = (sel == Menu::kStartGame)
-                                    ? makeScene("bedroom")
-                                    : levelRegistry()[sel].factory();
+                    int sel = menu.renderMainMenu(hasSave);
+                    if (sel == Menu::kContinueGame || sel == Menu::kStartGame ||
+                        sel == Menu::kRestartGame || sel >= 0) {
+                        if (sel == Menu::kContinueGame) {
+                            level = makeScene(save.currentScene.empty() ? "bedroom"
+                                                                        : save.currentScene, &save);
+                            inCampaign = true;
+                        } else if (sel == Menu::kStartGame || sel == Menu::kRestartGame) {
+                            if (sel == Menu::kRestartGame) { eraseSaveGame(savePath); hasSave = false; }
+                            save = SaveGame{};
+                            level = makeScene("bedroom", &save);
+                            inCampaign = true;
+                        } else {
+                            level = levelRegistry()[sel].factory();
+                            inCampaign = false;
+                        }
                         level->load();
                         insideMode = false;
                         level->cam3D().oscMode = 0;
@@ -442,6 +491,7 @@ int main(int argc, char** argv) {
                 glBindFramebuffer(GL_FRAMEBUFFER, 0);
                 glfwSwapBuffers(window);
             }
+            if (inCampaign && level) flushSave(save, savePath, level.get());
             level.reset();
             vr.shutdown();
         }
@@ -498,9 +548,10 @@ int main(int argc, char** argv) {
         }
         // Or auto-enter a game scene when START_SCENE is set.
         else if (startSceneEnv && state == GameState::MENU) {
-            level = makeScene(startSceneEnv);
+            level = makeScene(startSceneEnv, &save);
             level->load();
             insideMode = true;
+            inCampaign = true;
             state = GameState::IN_LEVEL;
             std::cout << "Started scene: " << level->name() << std::endl;
         }
@@ -562,12 +613,26 @@ int main(int argc, char** argv) {
             // Animated lamplit background behind the title screen (drawn over the
             // clear, before ImGui). The hand-drawn drift + mark layer on top of it.
             menuBg.render((float)glfwGetTime(), fbW, fbH);
-            int sel = menu.renderMainMenu();
-            if (sel == Menu::kStartGame) {
-                level = makeScene("bedroom");   // boot the first Lua game scene
+            int sel = menu.renderMainMenu(hasSave);
+            if (sel == Menu::kContinueGame) {
+                // Resume the saved scene; its load() reads the shared store (entry /
+                // intro_done) to place the player and skip already-seen story beats.
+                level = makeScene(save.currentScene.empty() ? "bedroom" : save.currentScene,
+                                  &save);
                 level->load();
                 insideMode = true;
                 settingsOpen = false;
+                inCampaign = true;
+                state = GameState::IN_LEVEL;
+                std::cout << "Continued game: " << level->name() << std::endl;
+            } else if (sel == Menu::kStartGame || sel == Menu::kRestartGame) {
+                if (sel == Menu::kRestartGame) { eraseSaveGame(savePath); hasSave = false; }
+                save = SaveGame{};              // fresh story state
+                level = makeScene("bedroom", &save);   // boot the first Lua game scene
+                level->load();
+                insideMode = true;
+                settingsOpen = false;
+                inCampaign = true;
                 state = GameState::IN_LEVEL;
                 std::cout << "Started game: " << level->name() << std::endl;
             } else if (sel >= 0) {
@@ -575,6 +640,7 @@ int main(int argc, char** argv) {
                 level->load();
                 insideMode = true;   // default to 4D FPS view; TAB drops to 3D observer
                 settingsOpen = false;
+                inCampaign = false;  // dev level — never touches the campaign save
                 state = GameState::IN_LEVEL;
                 std::cout << "Entered level: " << level->name() << std::endl;
             }
@@ -634,13 +700,26 @@ int main(int argc, char** argv) {
             {
                 std::string next = level->takeSceneRequest();
                 if (!next.empty()) {
-                    level = makeScene(next);
+                    level = makeScene(next, &save);
                     level->load();
                     insideMode = true;
+                    // Persist as soon as the new scene is live: a crash mid-play then
+                    // resumes here with the entry handshake the source scene just set.
+                    if (inCampaign) { flushSave(save, savePath, level.get()); hasSave = true; }
                     std::cout << "Scene -> " << level->name() << std::endl;
                 }
             }
             vis.time += deltaTime;  // drives pulse + camera sway (keeps animating when frozen)
+
+            // Periodic autosave while playing the campaign (story scenes only).
+            if (inCampaign) {
+                saveAccum += deltaTime;
+                if (saveAccum >= 10.0f) {
+                    flushSave(save, savePath, level.get());
+                    hasSave = true;
+                    saveAccum = 0.0f;
+                }
+            }
 
             // The observer camera sways per the M toggle (parallax depth cue).
             level->cam3D().oscMode = (int)vis.osc;
@@ -671,8 +750,11 @@ int main(int argc, char** argv) {
             if (settingsOpen) drawSettings(vis, settingsOpen);
 
             if (menu.renderBackButton() || level->checkWin()) {
+                if (inCampaign) { flushSave(save, savePath, level.get()); hasSave = true; }
                 level.reset();
                 settingsOpen = false;
+                inCampaign = false;
+                saveAccum = 0.0f;
                 state = GameState::MENU;
             }
         }
@@ -702,7 +784,9 @@ int main(int argc, char** argv) {
         glfwPollEvents();
     }
 
-    // Free any active level's GL resources while the context is still current.
+    // Final autosave on quit (Esc / window close) so progress isn't lost, then
+    // free the active level's GL resources while the context is still current.
+    if (inCampaign && level) flushSave(save, savePath, level.get());
     level.reset();
 
     // Cleanup ImGui

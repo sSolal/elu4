@@ -42,6 +42,7 @@ add_executable(game
     src/UiTheme.cpp
     src/MenuBackground.cpp
     src/LevelRegistry.cpp
+    src/SaveGame.cpp
     src/levels/ScriptedLevel.cpp
     src/lua/LuaBindings.cpp
     src/imgui/imgui.cpp

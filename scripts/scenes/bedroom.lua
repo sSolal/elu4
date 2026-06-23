@@ -4,7 +4,7 @@
 -- named in the UI) tells you to look at her, then walks you through the room using the
 -- Face & Turn mechanics (guiding dot + directional hints + facing detection, see
 -- scripts/levels/turnface.lua), and finally teaches W to walk forward as you follow
--- her down the corridor to scene 2 ("hall").
+-- her down the corridor to scene 2 ("neighbourhood").
 --
 -- Coordinate convention (see Camera4D): X/Z are the horizontal strafe plane, W is
 -- forward/depth, Y is up (gravity). The gaze is the camera's -W nose;
@@ -92,6 +92,9 @@ local active  = nil      -- current gaze target (vec4) or nil (hides the dot)
 local stepIdx = 1
 -- Follow-the-aunt bookkeeping.
 local auntGoalZ, bobPhase, bobY = 0.0, 0.0, 0.0
+-- When returning from the neighbourhood we spawn out in the corridor; this latches
+-- the "walk back out" trigger so it can't fire on the spawn frame (see state "free").
+local returnArmed = false
 
 -- ---- Face & Turn helpers (adapted from scripts/levels/turnface.lua) ---------
 local function isFaced(target)
@@ -160,13 +163,6 @@ function load()
   engine.set_focal(2.1)                       -- a touch more zoomed out (default 1.5)
   engine.body.radius = 0.8
   engine.body.gravityScale = 1.0
-  engine.cam4d.pos = vec4(0, 0.8, 0, 0)       -- room centre, eye ~0.8 above the floor
-  engine.cam4d.yaw = YAW_WINDOW               -- arrive looking at the window (+W)
-  engine.cam4d.pitch = 0.0
-
-  gates(false, false, false)                  -- open soft-locked: every key teaches, none frees
-  lockAllMovement()
-  engine.controls.headReturn = false
 
   -- Ground: one big non-occluding slab + a flat collider (covers the long corridor).
   do
@@ -215,6 +211,32 @@ function load()
   windowA = engine.load_asset("assets/window.json")
   auntA   = engine.load_asset("assets/npc.json")
   engine.asset_colliders(closetA, CLOSET_AT)
+
+  -- Spawn + controls depend on how we arrived. First time (or any time the intro
+  -- hasn't been completed) we run the full guided sequence from the room centre.
+  -- Returning from the neighbourhood through the blue corridor, we skip the intro:
+  -- the player appears out in the corridor facing the room and walks in freely, a
+  -- seamless continuation of the corridor they just walked down in the other scene.
+  local returning = engine.save_get("entry", "fresh") == "from_neighbourhood"
+                    or engine.save_get("intro_done", false)
+  if returning then
+    state = "free"
+    returnArmed = false
+    engine.cam4d.pos   = vec4(0, 0.8, -28.0, 0)     -- out in the corridor
+    engine.cam4d.yaw   = Rotor4D.from_zw(PI * 0.5)  -- nose -> +Z, facing the room
+    engine.cam4d.pitch = 0.0
+    engine.controls.lockedAxes = engine.AxisLock.NONE
+    gates(true, true, true)
+    engine.controls.headReturn = false
+  else
+    state = "intro"
+    engine.cam4d.pos   = vec4(0, 0.8, 0, 0)         -- room centre, eye ~0.8 above floor
+    engine.cam4d.yaw   = YAW_WINDOW                 -- arrive looking at the window (+W)
+    engine.cam4d.pitch = 0.0
+    gates(false, false, false)                     -- open soft-locked: every key teaches
+    lockAllMovement()
+    engine.controls.headReturn = false
+  end
 end
 
 -- Begin pointing the player at room thing `i` (or move on to the exit).
@@ -339,7 +361,21 @@ function update()
     auntPos = vec4(nx, bobY, nz, 0.0)
 
     if hint ~= "" and p.z < -2.0 then hint = "" end   -- they've got it
-    if p.z < -TRIGGER_Z then engine.goto_scene("hall") end
+    if p.z < -TRIGGER_Z then
+      engine.save_set("intro_done", true)
+      engine.save_set("entry", "from_bedroom")     -- neighbourhood -> spawn at the blue corridor
+      engine.goto_scene("neighbourhood")
+    end
+
+  elseif state == "free" then
+    -- Returned from the neighbourhood: walk freely. Arm the back-out trigger only
+    -- once the player has come in off the corridor, so it can't fire on spawn.
+    local p = engine.cam4d.pos
+    if p.z > -10.0 then returnArmed = true end
+    if returnArmed and p.z < -TRIGGER_Z then
+      engine.save_set("entry", "from_bedroom")
+      engine.goto_scene("neighbourhood")
+    end
   end
 end
 

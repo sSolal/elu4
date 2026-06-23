@@ -61,17 +61,20 @@ float Menu::drawTitle(float winW, float winH, float t) {
     return afterWord + 54.0f;   // window-local y where content begins
 }
 
-int Menu::drawLevelPanel(float winW, float winH, float contentTop) {
+int Menu::drawLevelPanel(float winW, float winH, float contentTop, bool hasSave) {
     const auto& levels = levelRegistry();
     int selected = -1;
 
     const float listW = 384.0f;
 
-    // Primary action: "Start game" — a prominent lamp-amber button above the dev
-    // level list. Clicking it returns the kStartGame sentinel so the runner boots
-    // the first game scene instead of a registry level.
-    const float startBtnH = 52.0f;
-    const float startBlock = startBtnH + 18.0f;  // button height + gap below it
+    // Primary action: a prominent lamp-amber button above the dev level list.
+    // "Continue game" when a save exists (returns kContinueGame), else "Start game"
+    // (returns kStartGame). With a save we also show a subtle grey "Restart game"
+    // below it, gated behind a confirmation popup.
+    const float startBtnH  = 52.0f;
+    const float restartH   = hasSave ? 30.0f : 0.0f;
+    const float restartGap = hasSave ? 8.0f : 0.0f;
+    const float startBlock = startBtnH + restartGap + restartH + 18.0f;
     ImGui::SetCursorPos(ImVec2((winW - listW) * 0.5f, contentTop));
     const ImVec4 lamp = elua::colLamp();
     ImGui::PushStyleColor(ImGuiCol_Button,        lamp);
@@ -79,10 +82,46 @@ int Menu::drawLevelPanel(float winW, float winH, float contentTop) {
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  lamp);
     ImGui::PushStyleColor(ImGuiCol_Text,          elua::colNight800());
     if (elua::fontHeading()) ImGui::PushFont(elua::fontHeading());
-    bool startClicked = ImGui::Button("Start game", ImVec2(listW, startBtnH));
+    bool startClicked = ImGui::Button(hasSave ? "Continue game" : "Start game",
+                                      ImVec2(listW, startBtnH));
     if (elua::fontHeading()) ImGui::PopFont();
     ImGui::PopStyleColor(4);
-    if (startClicked) return Menu::kStartGame;
+    int primary = -1;
+    if (startClicked) primary = hasSave ? Menu::kContinueGame : Menu::kStartGame;
+
+    // Subtle grey "Restart game" — quiet so it never competes with Continue. Opens
+    // a confirmation modal; only a confirmed restart returns kRestartGame.
+    if (hasSave) {
+        ImGui::SetCursorPos(ImVec2((winW - listW) * 0.5f, contentTop + startBtnH + restartGap));
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, elua::colPanel());
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  elua::colPanel());
+        ImGui::PushStyleColor(ImGuiCol_Text,          elua::colMuted());
+        if (ImGui::Button("Restart game", ImVec2(listW, restartH)))
+            ImGui::OpenPopup("Restart game?");
+        ImGui::PopStyleColor(4);
+
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),
+                                ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+        ImGui::PushStyleColor(ImGuiCol_PopupBg, elua::colNight700());
+        if (ImGui::BeginPopupModal("Restart game?", nullptr,
+                                   ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
+            ImGui::PushStyleColor(ImGuiCol_Text, elua::colCeramic());
+            ImGui::TextUnformatted("Erase your saved game and start over?");
+            ImGui::PopStyleColor();
+            ImGui::Dummy(ImVec2(0, 8));
+            if (ImGui::Button("Restart", ImVec2(120, 34))) {
+                primary = Menu::kRestartGame;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 34)))
+                ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+        ImGui::PopStyleColor();
+    }
+    if (primary != -1) return primary;
 
     const float listTop = contentTop + startBlock;
 
@@ -189,7 +228,7 @@ void Menu::drawCredits(float winW, float winH, float contentTop) {
     ImGui::PopStyleColor();
 }
 
-int Menu::renderMainMenu() {
+int Menu::renderMainMenu(bool hasSave) {
     ImGuiViewport* vp = ImGui::GetMainViewport();
     const ImVec2 size = vp->Size;
     const float  t    = (float)ImGui::GetTime();
@@ -212,7 +251,7 @@ int Menu::renderMainMenu() {
     if (showCredits)
         drawCredits(size.x, size.y, contentTop);
     else
-        selected = drawLevelPanel(size.x, size.y, contentTop);
+        selected = drawLevelPanel(size.x, size.y, contentTop, hasSave);
 
     ImGui::End();
     ImGui::PopStyleVar();

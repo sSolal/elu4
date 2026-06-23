@@ -13,6 +13,7 @@
 class Renderer;       // fwd — defined in Renderer.h
 struct Object4D;      // fwd — defined in Object4D.h
 struct ObjectBuffer;  // fwd — defined in ObjectBuffer.h
+struct SaveGame;      // fwd — defined in SaveGame.h
 
 // Everything a level needs each frame, supplied by the runner in main.cpp so
 // levels never reach for globals. The runner updates the level first, then
@@ -72,6 +73,12 @@ public:
     // another scene. Returns the requested scene name and clears the request, or
     // "" if none. C++ levels never request a transition (default empty).
     virtual std::string takeSceneRequest() { return {}; }
+
+    // Autosave hook: record this level's resumable state into `sg` (its scene name
+    // and, via the scene's optional Lua save() hook, a per-scene blob). The runner
+    // calls this just before serializing the save. Only the scripted game scenes
+    // override it; dev/C++ levels do nothing (they are never persisted).
+    virtual void writeAutosave(SaveGame& sg) const {}
 
     // The runner needs these to drive the outer-cube camera and focal length.
     Camera3D& cam3D()       { return cam3D_; }
