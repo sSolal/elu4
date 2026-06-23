@@ -117,30 +117,52 @@ void Camera4D::processInput(GLFWwindow* window, float dt, PhysicsBody& playerBod
                             const LevelControls& ctrl) {
     // Horizontal turning (U/L, J/O): compose into `yaw` within {X,Z,W} only, in
     // the local frame. These planes never involve Y, so the horizon can't tilt.
-    float a = glm::radians(lookSpeed * dt);  // per-frame turn increment
+    // A plane the level has *not* locked turns the committed yaw freely. A *locked*
+    // plane instead drives a springy soft-lock excursion (Camera4D::soft*): the head
+    // leans into the plane, slows as it nears softLockMax, and eases back to zero when
+    // released — so the player learns the key exists without being able to use it yet.
+    float step = lookSpeed * dt;          // per-frame turn increment (degrees)
+    float a    = glm::radians(step);      // ... in radians, for the yaw rotors
+    float maxA = ctrl.softLockMax;
+    float retK = 1.0f - std::exp(-ctrl.softLockReturn * dt);  // frame-rate independent
 
-    bool lookInput = false;  // did the player actively turn the head this frame?
-    if (glfwGetKey(window, GLFW_KEY_U) == GLFW_PRESS) {
-        yaw = Math4D::Rotor4D::fromZW(-a) * yaw; lookInput = true;
+    auto pressed = [&](int key) { return glfwGetKey(window, key) == GLFW_PRESS; };
+    // Soft-lock one plane: `neg`/`pos` keys lean `soft` toward -/+max with slowdown,
+    // and it springs to zero on release. Returns nothing; mutates `soft`.
+    auto softTurn = [&](float& soft, bool neg, bool pos) {
+        float scale = std::max(0.0f, 1.0f - std::abs(soft) / maxA);
+        bool any = false;
+        if (neg) { soft -= step * scale; any = true; }
+        if (pos) { soft += step * scale; any = true; }
+        if (!any) soft += (0.0f - soft) * retK;
+        soft = glm::clamp(soft, -maxA, maxA);
+    };
+
+    bool lookInput = false;  // did the player actively turn the *committed* head?
+    if (ctrl.turnZW) {
+        if (pressed(GLFW_KEY_U)) { yaw = Math4D::Rotor4D::fromZW(-a) * yaw; lookInput = true; }
+        if (pressed(GLFW_KEY_L)) { yaw = Math4D::Rotor4D::fromZW(a)  * yaw; lookInput = true; }
+        softZW += (0.0f - softZW) * retK;   // ease out any leftover excursion
+    } else {
+        softTurn(softZW, pressed(GLFW_KEY_U), pressed(GLFW_KEY_L));
     }
-    if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
-        yaw = Math4D::Rotor4D::fromZW(a) * yaw; lookInput = true;
-    }
-    if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) {
-        yaw = Math4D::Rotor4D::fromXW(-a) * yaw; lookInput = true;
-    }
-    if (glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS) {
-        yaw = Math4D::Rotor4D::fromXW(a) * yaw; lookInput = true;
+    if (ctrl.turnXW) {
+        if (pressed(GLFW_KEY_J)) { yaw = Math4D::Rotor4D::fromXW(-a) * yaw; lookInput = true; }
+        if (pressed(GLFW_KEY_O)) { yaw = Math4D::Rotor4D::fromXW(a)  * yaw; lookInput = true; }
+        softXW += (0.0f - softXW) * retK;
+    } else {
+        softTurn(softXW, pressed(GLFW_KEY_J), pressed(GLFW_KEY_O));
     }
     yaw.normalize();  // keep it a unit rotor across a long session
 
     // Look up/down (I/K): a single clamped pitch angle, applied OUTSIDE the yaw
     // in getOrientation(), so world-up stays in the camera Y-W plane (no roll).
-    if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS) {
-        pitch += lookSpeed * dt; lookInput = true;
-    }
-    if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) {
-        pitch -= lookSpeed * dt; lookInput = true;
+    if (ctrl.pitch) {
+        if (pressed(GLFW_KEY_I)) { pitch += step; lookInput = true; }
+        if (pressed(GLFW_KEY_K)) { pitch -= step; lookInput = true; }
+        softPitch += (0.0f - softPitch) * retK;
+    } else {
+        softTurn(softPitch, pressed(GLFW_KEY_K), pressed(GLFW_KEY_I));  // I = up = +
     }
     pitch = glm::clamp(pitch, -89.0f, 89.0f);
 
@@ -163,8 +185,10 @@ void Camera4D::processInput(GLFWwindow* window, float dt, PhysicsBody& playerBod
 
     float moveSpeed = speed * dt;
 
-    // Compute 4D camera basis vectors in world space via inverse (reverse) of camera rotor
-    Math4D::Rotor4D R = getOrientation();
+    // Compute 4D camera basis vectors in world space via inverse (reverse) of camera
+    // rotor. Use the committed pose (no soft-lock wobble) so walking tracks the locked
+    // facing rather than the springy head excursion.
+    Math4D::Rotor4D R = getCommittedOrientation();
     Math4D::Rotor4D Rrev = R.reverse();
     glm::mat4 invM = Rrev.toMatrix();
     glm::vec4 fwd = invM * glm::vec4(1,0,0,0);  // camera X in world (forward)

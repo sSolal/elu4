@@ -22,6 +22,18 @@ struct LevelControls {
     unsigned lockedAxes      = AxisLock::NONE;  // axes to zero out of desiredMove
     bool     lockIsWorldSpace = true;           // true = world axes, false = camera axes
 
+    // --- Turn gates (orientation input) ---
+    // true  = the plane turns the committed heading freely (normal play).
+    // false = the plane is *soft-locked*: its keys still lean the head into the plane,
+    //         slowing as the excursion nears softLockMax and springing back to zero on
+    //         release (see Camera4D::soft*). Used by guided scenes for one-axis turning
+    //         and "this key isn't available yet, but here's what it does" teaching.
+    bool turnXW = true;   // J/O horizontal turn (XW plane)
+    bool turnZW = true;   // U/L horizontal turn (ZW plane)
+    bool pitch  = true;   // I/K look up/down
+    float softLockMax    = 30.0f;  // degrees: max excursion of a soft-locked plane
+    float softLockReturn = 9.0f;   // 1/sec: spring-back rate of a soft-locked plane
+
     // --- Head return (orientation spring) ---
     bool            headReturn         = false;  // spring yaw/pitch toward defaults
     float           headReturnStrength = 8.0f;   // 1/sec; higher = snappier

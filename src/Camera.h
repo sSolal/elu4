@@ -44,9 +44,26 @@ public:
     float speed;
     float lookSpeed;  // degrees per second
 
+    // Soft-lock excursions (degrees). When a level marks a turn plane as locked, the
+    // keys still nudge the head into that plane (slowing as they near softLockMax) and
+    // spring back to zero on release — so the player sees the key "does something" but
+    // isn't free yet. These are temporary, never bake into the committed yaw/pitch:
+    // they fold into the *view* (getOrientation) only; movement uses the committed pose.
+    float softXW = 0.0f;
+    float softZW = 0.0f;
+    float softPitch = 0.0f;
+
     Camera4D();
-    Math4D::Rotor4D getOrientation() const {
+    // The committed pose, excluding the springy soft-lock excursion (used for movement).
+    Math4D::Rotor4D getCommittedOrientation() const {
         return Math4D::Rotor4D::fromYW(glm::radians(pitch)) * yaw;
+    }
+    // The viewed pose: committed pose plus any soft-lock head excursion.
+    Math4D::Rotor4D getOrientation() const {
+        Math4D::Rotor4D y = yaw;
+        if (softXW != 0.0f) y = Math4D::Rotor4D::fromXW(glm::radians(softXW)) * y;
+        if (softZW != 0.0f) y = Math4D::Rotor4D::fromZW(glm::radians(softZW)) * y;
+        return Math4D::Rotor4D::fromYW(glm::radians(pitch + softPitch)) * y;
     }
     void processInput(GLFWwindow* window, float dt, PhysicsBody& playerBody, PhysicsWorld& physWorld,
                       const LevelControls& ctrl = LevelControls{});
