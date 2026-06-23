@@ -1,0 +1,123 @@
+name: Release
+
+# Build self-contained packages for Linux (AppImage) and Windows (zip) and attach
+# them to a GitHub Release whenever a version tag (vX.Y.Z) is pushed.
+#   git tag v0.1.0 && git push origin v0.1.0
+# workflow_dispatch lets you exercise the build (artifacts only, no Release) from
+# the Actions tab without cutting a tag.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to create the GitHub Release
+
+jobs:
+  # ---------------------------------------------------------------- Linux ----
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build + packaging dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake \
+            libglew-dev libglfw3-dev libglm-dev libgl1-mesa-dev \
+            imagemagick fuse libfuse2 file wget
+
+      - name: Configure & build (game only, Release)
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --target game -j
+
+      - name: Stage AppDir (binary + runtime assets side by side)
+        run: |
+          mkdir -p AppDir/usr/bin
+          cp build/game AppDir/usr/bin/
+          # The binary chdir's to its own directory at startup, so the asset
+          # folders must sit right next to it inside the AppDir.
+          cp -r shaders assets scripts AppDir/usr/bin/
+          # A simple lamp-amber icon so linuxdeploy has something to embed. Drawn
+          # with shape primitives only (no text) so it needs no font installed.
+          convert -size 256x256 xc:'#15151f' \
+            -fill '#f0b24a' -draw 'circle 128,128 128,46' \
+            -fill '#15151f' -draw 'circle 128,128 128,72' \
+            -fill '#f0b24a' -draw 'circle 128,128 128,118' \
+            elu4.png
+
+      - name: Build AppImage
+        run: |
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage
+          # First pass: pull in non-system shared libs (libGLEW, libglfw, ...).
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir \
+            -e build/game -d packaging/elu4.desktop -i elu4.png
+          # Re-copy assets in case linuxdeploy pruned anything, then package.
+          cp -r shaders assets scripts AppDir/usr/bin/
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir --output appimage
+          mv Elua*.AppImage elu4-x86_64.AppImage || mv *.AppImage elu4-x86_64.AppImage
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: elu4-linux
+          path: elu4-x86_64.AppImage
+
+  # -------------------------------------------------------------- Windows ----
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure & build (game only, Release, static deps via vcpkg)
+        shell: pwsh
+        run: |
+          cmake -S . -B build `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static `
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --target game --config Release -j
+
+      - name: Stage release folder (exe + runtime assets)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/elu4 | Out-Null
+          # MSVC may place the exe under build/Release/ or build/.
+          $exe = Get-ChildItem -Path build -Recurse -Filter game.exe | Select-Object -First 1
+          Copy-Item $exe.FullName dist/elu4/game.exe
+          Copy-Item -Recurse shaders dist/elu4/shaders
+          Copy-Item -Recurse assets  dist/elu4/assets
+          Copy-Item -Recurse scripts dist/elu4/scripts
+          Compress-Archive -Path dist/elu4/* -DestinationPath elu4-windows-x64.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: elu4-windows
+          path: elu4-windows-x64.zip
+
+  # ------------------------------------------------ Publish the Release ------
+  release:
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/elu4-linux/elu4-x86_64.AppImage
+            artifacts/elu4-windows/elu4-windows-x64.zip
+          generate_release_notes: true

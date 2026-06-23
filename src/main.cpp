@@ -24,6 +24,15 @@
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
 
+#if defined(_WIN32)
+  #define NOMINMAX              // don't let <windows.h> define min()/max() macros
+  #define WIN32_LEAN_AND_MEAN   // trim the include; we only need filesystem/dir calls
+  #include <windows.h>
+#else
+  #include <unistd.h>
+  #include <limits.h>
+#endif
+
 const unsigned int SCR_WIDTH = 1920;
 const unsigned int SCR_HEIGHT = 1080;
 
@@ -167,7 +176,56 @@ static std::vector<EyeView> buildDesktopEyes(int fbW, int fbH,
             {hw, 0, fbW - hw, fbH, rView, proj}};
 }
 
+// Make the game runnable from any working directory: assets (shaders/, assets/,
+// scripts/) are loaded by paths relative to the cwd. In a packaged release those
+// folders sit right beside the binary, so we chdir into the executable's own
+// directory and everything resolves no matter where it was launched from
+// (double-click, file manager, a shortcut elsewhere).
+//
+// We only chdir when the assets are actually next to the binary: in the dev build
+// tree the binary lives in build/ while the assets live in the repo root, and the
+// game is run from that root — chdir'ing into build/ there would *break* it. The
+// shaders/ probe distinguishes "packaged release" from "dev build tree".
+#if defined(_WIN32)
+static bool dirHasShaders(const wchar_t* dir) {
+    std::wstring p = std::wstring(dir) + L"\\shaders";
+    DWORD a = GetFileAttributesW(p.c_str());
+    return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY);
+}
+#else
+static bool dirHasShaders(const char* dir) {
+    std::string p = std::string(dir) + "/shaders";
+    return access(p.c_str(), F_OK) == 0;
+}
+#endif
+
+static void chdirToExeDir() {
+#if defined(_WIN32)
+    wchar_t buf[MAX_PATH];
+    DWORD n = GetModuleFileNameW(NULL, buf, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    // Trim the executable name, leaving the directory.
+    for (DWORD i = n; i > 0; --i) {
+        if (buf[i - 1] == L'\\' || buf[i - 1] == L'/') { buf[i - 1] = L'\0'; break; }
+    }
+    if (dirHasShaders(buf)) SetCurrentDirectoryW(buf);
+#else
+    char buf[PATH_MAX];
+    ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (n <= 0) return;
+    buf[n] = '\0';
+    // Trim the executable name, leaving the directory, then chdir into it.
+    for (ssize_t i = n; i > 0; --i) {
+        if (buf[i - 1] == '/') { buf[i - 1] = '\0'; break; }
+    }
+    if (dirHasShaders(buf) && chdir(buf) != 0)
+        std::cerr << "warning: could not chdir to executable directory\n";
+#endif
+}
+
 int main(int argc, char** argv) {
+    chdirToExeDir();   // resolve assets relative to the binary, not the launch cwd
+
     // --fake-stereo: render two side-by-side eyes on the desktop (a VR-stereo
     // stand-in) instead of one mono view. Default (no flag) is mono, which is
     // pixel-identical to the original single-view behaviour.
@@ -182,7 +240,13 @@ int main(int argc, char** argv) {
     // Force the X11 backend: GLEW queries OpenGL through GLX, which a native
     // Wayland/EGL context doesn't provide, so glewInit() fails on Wayland
     // sessions. XWayland supplies GLX, so this works everywhere.
+    //
+    // GLFW_PLATFORM is a 3.4+ API; on older GLFW (e.g. the 3.3 on some CI
+    // runners) Linux is X11-only anyway, so skipping the hint is harmless. The
+    // hint is Linux-specific — never force X11 on Windows/macOS.
+#if defined(GLFW_PLATFORM) && defined(GLFW_PLATFORM_X11) && !defined(_WIN32) && !defined(__APPLE__)
     glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+#endif
     if (!glfwInit()) {
         std::cerr << "Failed to initialize GLFW" << std::endl;
         return -1;
@@ -340,15 +404,6 @@ int main(int argc, char** argv) {
                     LevelContext uctx{window, renderer, hyperMesh, hyperBuf, deltaTime, insideMode,
                                       glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f), vis};
                     level->update(uctx);
-                    {
-                        std::string next = level->takeSceneRequest();
-                        if (!next.empty()) {
-                            level = makeScene(next);
-                            level->load();
-                            obsV0 = level->cam3D().getViewMatrix();
-                            std::cout << "[VR] scene -> " << level->name() << std::endl;
-                        }
-                    }
                     vis.time += deltaTime;
                     if (level->checkWin()) { level.reset(); vrState = GameState::MENU; }
                 }
@@ -360,10 +415,8 @@ int main(int argc, char** argv) {
                 ImGui::NewFrame();
                 if (vrState == GameState::MENU) {
                     int sel = menu.renderMainMenu();
-                    if (sel == Menu::kStartGame || sel >= 0) {
-                        level = (sel == Menu::kStartGame)
-                                    ? makeScene("bedroom")
-                                    : levelRegistry()[sel].factory();
+                    if (sel >= 0) {
+                        level = levelRegistry()[sel].factory();
                         level->load();
                         insideMode = false;
                         level->cam3D().oscMode = 0;
@@ -463,14 +516,10 @@ int main(int argc, char** argv) {
     // START_LEVEL=<n>  : skip the menu and boot straight into level n (1-based,
     //                    matching the menu numbering). Useful for iterating on one
     //                    level without clicking through the menu each launch.
-    // START_SCENE=<nm> : skip the menu and boot straight into the game scene
-    //                    scripts/scenes/<nm>.lua (the same path as "Start game" and
-    //                    engine.goto_scene). Iterates on a scene without clicking.
     // FPS_LOG=1        : also print the running FPS to stdout once per second.
     // The window title always shows the live FPS (updated once per second).
     const char* startLevelEnv = getenv("START_LEVEL");
     const int   startLevel     = startLevelEnv ? atoi(startLevelEnv) : 0;  // 1-based; 0 = menu
-    const char* startSceneEnv  = getenv("START_SCENE");                    // scene name or null
     const bool  fpsLog         = getenv("FPS_LOG") != nullptr;
     double fpsAccum = 0.0; int fpsFrames = 0;
 
@@ -495,14 +544,6 @@ int main(int argc, char** argv) {
             insideMode = true;
             state = GameState::IN_LEVEL;
             std::cout << "Entered level: " << level->name() << std::endl;
-        }
-        // Or auto-enter a game scene when START_SCENE is set.
-        else if (startSceneEnv && state == GameState::MENU) {
-            level = makeScene(startSceneEnv);
-            level->load();
-            insideMode = true;
-            state = GameState::IN_LEVEL;
-            std::cout << "Started scene: " << level->name() << std::endl;
         }
 
         // Live FPS readout: window title, plus optional stdout log.
@@ -563,14 +604,7 @@ int main(int argc, char** argv) {
             // clear, before ImGui). The hand-drawn drift + mark layer on top of it.
             menuBg.render((float)glfwGetTime(), fbW, fbH);
             int sel = menu.renderMainMenu();
-            if (sel == Menu::kStartGame) {
-                level = makeScene("bedroom");   // boot the first Lua game scene
-                level->load();
-                insideMode = true;
-                settingsOpen = false;
-                state = GameState::IN_LEVEL;
-                std::cout << "Started game: " << level->name() << std::endl;
-            } else if (sel >= 0) {
+            if (sel >= 0) {
                 level = levelRegistry()[sel].factory();
                 level->load();
                 insideMode = true;   // default to 4D FPS view; TAB drops to 3D observer
@@ -627,19 +661,6 @@ int main(int argc, char** argv) {
                 level->update(uctx);
             }
 
-            // A scene may have requested a transition (engine.goto_scene). Swap now
-            // that update() has finished: reassigning the unique_ptr frees the old
-            // scene's GL buffers, and the new scene's load() runs immediately so we
-            // can render it this same frame (no black frame).
-            {
-                std::string next = level->takeSceneRequest();
-                if (!next.empty()) {
-                    level = makeScene(next);
-                    level->load();
-                    insideMode = true;
-                    std::cout << "Scene -> " << level->name() << std::endl;
-                }
-            }
             vis.time += deltaTime;  // drives pulse + camera sway (keeps animating when frozen)
 
             // The observer camera sways per the M toggle (parallax depth cue).

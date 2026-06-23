@@ -5,10 +5,6 @@ public:
     Menu();
     ~Menu();
 
-    // Sentinel returned by renderMainMenu() when the player clicks "Start game"
-    // (distinct from a level index, which is >= 0).
-    static constexpr int kStartGame = -2;
-
     // Renders the Elua title screen: animated lamplit background, the "Elua"
     // wordmark + logo mark + tagline, the level panel, and the Credits entry.
     // Returns the index of the clicked level, or -1 if nothing was picked this

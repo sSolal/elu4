@@ -5,6 +5,16 @@
 #include <cmath>
 #include <algorithm>
 
+// Portable population count (number of set bits). GCC/Clang expose
+// __builtin_popcount; MSVC has __popcnt via <intrin.h>. The project is C++17,
+// so std::popcount (C++20) isn't available.
+#if defined(_MSC_VER)
+  #include <intrin.h>
+  static inline int popcount4d(unsigned x) { return (int)__popcnt(x); }
+#else
+  static inline int popcount4d(unsigned x) { return __builtin_popcount(x); }
+#endif
+
 // The engine's standard hypercube half-extent, used for shared marker/goal cubes
 // (formerly Tesseract::HS). Keeps those markers their historical size.
 constexpr float kHyperHalf = 0.3f;
@@ -82,10 +92,10 @@ inline Object4D generateBox(const glm::vec4& half) {
     // Cells (square faces): vertices differing in exactly two coordinates.
     for (int i = 0; i < 16; i++) {
         for (int j = i + 1; j < 16; j++) {
-            if (__builtin_popcount(i ^ j) != 2) continue;
+            if (popcount4d(i ^ j) != 2) continue;
             for (int k = 0; k < 16; k++) {
                 if (k == i || k == j) continue;
-                if (__builtin_popcount(i ^ k) == 1 && __builtin_popcount(j ^ k) == 1) {
+                if (popcount4d(i ^ k) == 1 && popcount4d(j ^ k) == 1) {
                     int l = i ^ j ^ k;
                     if (i < j && i < k && i < l)
                         box.cells.push_back({i, k, j, l});  // cyclic order

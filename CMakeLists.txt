@@ -9,6 +9,19 @@ find_package(GLEW REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(glm REQUIRED)
 
+# glm ships its target as `glm::glm` (vcpkg, recent upstream) or sometimes a bare
+# `glm` target / only GLM_INCLUDE_DIRS (older distro packages). Normalise to the
+# `glm::glm` name the targets below link against, so the same CMakeLists builds on
+# Linux distro packages and on Windows via vcpkg.
+if(NOT TARGET glm::glm)
+    if(TARGET glm)
+        add_library(glm::glm ALIAS glm)
+    else()
+        add_library(glm::glm INTERFACE IMPORTED)
+        target_include_directories(glm::glm INTERFACE ${GLM_INCLUDE_DIRS})
+    endif()
+endif()
+
 # --- Embedded Lua 5.4 + sol2 (scripting core, vendored in src/third_party) ---
 # Lua is built from the vendored amalgamated sources as a small static lib
 # (the standalone lua.c/luac.c mains were dropped when vendoring). sol2 is the
@@ -110,7 +123,7 @@ target_include_directories(tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_include_directories(lua_smoke PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
 target_link_libraries(game
-    OpenGL::OpenGL
+    OpenGL::GL
     GLEW::GLEW
     glfw
     glm::glm
@@ -135,7 +148,7 @@ if(BUILD_VR)
 endif()
 
 target_link_libraries(visualizer
-    OpenGL::OpenGL
+    OpenGL::GL
     GLEW::GLEW
     glfw
     glm::glm

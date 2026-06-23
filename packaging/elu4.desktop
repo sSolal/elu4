@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Elua
+Comment=A 4D game — keep the lamps lit
+Exec=game
+Icon=elu4
+Categories=Game;
+Terminal=false

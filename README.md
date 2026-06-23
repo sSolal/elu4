@@ -52,6 +52,25 @@ feels natural.
 
 Per-level design notes live in [`docs/levels/`](docs/levels/).
 
+## Install (play without building)
+
+Prebuilt, ready-to-run packages are on the
+[**Releases**](https://github.com/sSolal/elu4/releases) page — no compiler or
+dependencies to install.
+
+- **Linux** — download `elu4-x86_64.AppImage`, then:
+  ```bash
+  chmod +x elu4-x86_64.AppImage
+  ./elu4-x86_64.AppImage
+  ```
+  (A working GPU driver with OpenGL is the only requirement; GLEW/GLFW are
+  bundled.)
+- **Windows** — download `elu4-windows-x64.zip`, extract it, and run
+  `game.exe`.
+
+The package contains the ten tutorial levels; the binary finds its assets
+relative to itself, so it runs from anywhere (including a double-click).
+
 ## Building
 
 elu4 is C++17 + OpenGL, built with CMake. It targets Linux (X11/Wayland) and
@@ -60,7 +79,7 @@ should port to other desktops with the same dependencies.
 **Dependencies** (Debian/Ubuntu names):
 
 ```bash
-sudo apt install build-essential cmake libglew-dev libglfw3-dev libglm-dev libx11-dev
+sudo apt install build-essential cmake libglew-dev libglfw3-dev libglm-dev
 ```
 
 **Clone (with the ImGui submodule) and build:**
@@ -148,6 +167,17 @@ Other build targets: `visualizer`, `generate_objects`, `4dg` (object CLI),
 
 ```bash
 ctest --test-dir build      # or: ./build/tests
+```
+
+## Releasing
+
+Pushing a version tag builds the Linux AppImage and Windows zip and publishes
+them to a GitHub Release automatically (see
+[`.github/workflows/release.yml`](.github/workflows/release.yml)):
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
 ```
 
 ## Contributing

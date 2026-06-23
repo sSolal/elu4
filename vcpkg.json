@@ -1,0 +1,11 @@
+{
+  "name": "elu4",
+  "version-string": "0.1.0",
+  "description": "A 4D game — desktop OpenGL renderer with Lua-scripted levels.",
+  "homepage": "https://github.com/sternsolal/4DGGame",
+  "dependencies": [
+    "glew",
+    "glfw3",
+    "glm"
+  ]
+}

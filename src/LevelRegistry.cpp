@@ -6,8 +6,8 @@ const std::vector<LevelEntry>& levelRegistry() {
     // The campaign, in teaching order. Every level is a Lua script under
     // scripts/levels/ run through ScriptedLevel — the original C++ level classes
     // were removed once the port was complete (the engine now runs entirely on the
-    // scripting layer; the game proper lives in scripts/scenes/). Built once on
-    // first call; each entry constructs its ScriptedLevel lazily on selection.
+    // scripting layer). Built once on first call; each entry constructs its
+    // ScriptedLevel lazily on selection.
     static const std::vector<LevelEntry> registry = [] {
         auto scripted = [](const char* path, const char* label) {
             return LevelEntry{label, true,
@@ -29,9 +29,4 @@ const std::vector<LevelEntry>& levelRegistry() {
     }();
 
     return registry;
-}
-
-std::unique_ptr<Level> makeScene(const std::string& sceneName) {
-    std::string path = "scripts/scenes/" + sceneName + ".lua";
-    return std::unique_ptr<Level>(new ScriptedLevel(path, sceneName));
 }
