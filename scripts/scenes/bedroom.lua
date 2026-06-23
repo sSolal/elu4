@@ -97,9 +97,9 @@ function load()
   -- Each asset is authored in local space (see assets/*.json); the second arg is
   -- the world anchor it is placed at. draw_asset (in render) draws them; the closet
   -- body is the only solid piece, so register its collider here.
-  bedA    = engine.load_asset("assets/bed.json")     -- mattress + headboard + 6 legs (-Z wall)
+  bedA    = engine.load_asset("assets/bed.json")     -- mattress + 8 corner legs (-Z wall)
   closetA = engine.load_asset("assets/closet.json")  -- body + glass door face (+Z wall)
-  deskA   = engine.load_asset("assets/desk.json")    -- top + 6 legs (-W wall)
+  deskA   = engine.load_asset("assets/desk.json")    -- top + 8 corner legs (-W wall)
   stoolA  = engine.load_asset("assets/stool.json")   -- seat + 4 tetrahedral legs
   windowA = engine.load_asset("assets/window.json")  -- frame + pane (+W wall)
   engine.asset_colliders(closetA, vec4(2.6, 0, 4.2, 0))
